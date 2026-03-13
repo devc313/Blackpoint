@@ -1,0 +1,348 @@
+OUT_DIR = Some(C:\Users\Administrator\Desktop\vibe\target\debug\build\capstone-sys-b7468e6f22a2cd52\out)
+OPT_LEVEL = Some(0)
+TARGET = Some(x86_64-pc-windows-msvc)
+CARGO_ENCODED_RUSTFLAGS = Some()
+cargo:rerun-if-env-changed=VCINSTALLDIR
+VCINSTALLDIR = None
+cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+VSTEL_MSBuildProjectFullPath = None
+cargo:rerun-if-env-changed=VCToolsVersion
+VCToolsVersion = None
+cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+VSCMD_ARG_VCVARS_SPECTRE = None
+cargo:rerun-if-env-changed=WindowsSdkDir
+WindowsSdkDir = None
+cargo:rerun-if-env-changed=WindowsSDKVersion
+WindowsSDKVersion = None
+cargo:rerun-if-env-changed=LIB
+LIB = None
+PATH = Some(C:\Users\Administrator\Desktop\vibe\target\debug;C:\Users\Administrator\Desktop\vibe\target\debug\deps;C:\Users\Administrator\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib;C:\Users\Administrator\.cargo\bin;C:\Users\Administrator\.codex\tmp\arg0\codex-arg0Zkkxqr;C:\Program Files (x86)\Common Files\Oracle\Java\java8path;C:\Program Files (x86)\Common Files\Oracle\Java\javapath;C:\Python314\Scripts\;C:\Python314\;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Program Files\nodejs\;C:\ProgramData\chocolatey\bin;C:\Program Files\Cloudflare\Cloudflare WARP\;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\Program Files\Git\cmd;C:\Program Files\pping\;C:\Users\Administrator\AppData\Local\Microsoft\WindowsApps;C:\Users\Administrator\AppData\Local\Python\bin;C:\Users\Administrator\AppData\Roaming\npm;C:\Users\Administrator\AppData\Local\Programs\Antigravity\bin;C:\Users\Administrator\.local\bin;C:\Users\Administrator\AppData\Local\Programs\Windsurf\bin;C:\Users\Administrator\AppData\Local\GitHubDesktop\bin;C:\Users\Administrator\AppData\Local\Programs\cursor\resources\app\bin;C:\Users\Administrator\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Administrator\AppData\Local\OpenAI\Codex\bin;C:\Program Files\WindowsApps\OpenAI.Codex_26.306.996.0_x64__2p2nqsd0c76g0\app\resources;C:\Users\Administrator\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin)
+cargo:rerun-if-env-changed=INCLUDE
+INCLUDE = None
+HOST = Some(x86_64-pc-windows-msvc)
+cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+CC_x86_64-pc-windows-msvc = None
+cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+CC_x86_64_pc_windows_msvc = None
+cargo:rerun-if-env-changed=HOST_CC
+HOST_CC = None
+cargo:rerun-if-env-changed=CC
+CC = None
+cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+CRATE_CC_NO_DEFAULTS = None
+DEBUG = Some(true)
+cargo:rerun-if-env-changed=CFLAGS
+CFLAGS = None
+cargo:rerun-if-env-changed=HOST_CFLAGS
+HOST_CFLAGS = None
+cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+CFLAGS_x86_64_pc_windows_msvc = None
+cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+CFLAGS_x86_64-pc-windows-msvc = None
+OUT_DIR = Some(C:\Users\Administrator\Desktop\vibe\target\debug\build\capstone-sys-b7468e6f22a2cd52\out)
+cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+CRATE_CC_NO_DEFAULTS = None
+TARGET = Some(x86_64-pc-windows-msvc)
+CARGO_CFG_TARGET_FEATURE = Some(cmpxchg16b,fxsr,sse,sse2,sse3)
+HOST = Some(x86_64-pc-windows-msvc)
+cargo:rerun-if-env-changed=CFLAGS
+CFLAGS = None
+cargo:rerun-if-env-changed=HOST_CFLAGS
+HOST_CFLAGS = None
+cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+CFLAGS_x86_64_pc_windows_msvc = None
+cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+CFLAGS_x86_64-pc-windows-msvc = None
+cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+MCInst.c
+MCInstrDesc.c
+MCRegisterInfo.c
+SStream.c
+AArch64BaseInfo.c
+AArch64Disassembler.c
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(207): warning C4456: declaration of 'Mask' hides previous local declaration
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(197): note: see declaration of 'Mask'
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(222): warning C4244: 'function': conversion from 'uint64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(224): warning C4244: 'function': conversion from 'uint64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(232): warning C4244: 'function': conversion from 'uint64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(234): warning C4244: 'function': conversion from 'uint64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(419): warning C4244: 'return': conversion from 'uint64_t' to 'uint8_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(517): warning C4244: 'return': conversion from 'uint64_t' to 'uint8_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64GenDisassemblerTables.inc(22560): warning C4244: '=': conversion from 'uint64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64GenDisassemblerTables.inc(22560): warning C4244: '=': conversion from 'uint64_t' to 'unsigned int', possible loss of data
+capstone/arch/AArch64/AArch64Disassembler.c(1851): warning C4244: 'function': conversion from 'uint32_t' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64Disassembler.c(1938): warning C4334: '<<': result of 32-bit shift implicitly converted to 64 bits (was 64-bit shift intended?)
+AArch64InstPrinter.c
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(207): warning C4456: declaration of 'Mask' hides previous local declaration
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(197): note: see declaration of 'Mask'
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(222): warning C4244: 'function': conversion from 'uint64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(224): warning C4244: 'function': conversion from 'uint64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(232): warning C4244: 'function': conversion from 'uint64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(234): warning C4244: 'function': conversion from 'uint64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(419): warning C4244: 'return': conversion from 'uint64_t' to 'uint8_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64AddressingModes.h(517): warning C4244: 'return': conversion from 'uint64_t' to 'uint8_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(367): warning C4456: declaration of 'LSB' hides previous local declaration
+capstone/arch/AArch64/AArch64InstPrinter.c(105): note: see declaration of 'LSB'
+capstone/arch/AArch64/AArch64InstPrinter.c(368): warning C4456: declaration of 'Width' hides previous local declaration
+capstone/arch/AArch64/AArch64InstPrinter.c(105): note: see declaration of 'Width'
+capstone/arch/AArch64/AArch64InstPrinter.c(523): warning C4244: 'initializing': conversion from 'int64_t' to 'int', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(557): warning C4244: 'initializing': conversion from 'int64_t' to 'int', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(896): warning C4244: '=': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(915): warning C4996: 'strncpy': This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+capstone/arch/AArch64/AArch64InstPrinter.c(928): warning C4996: 'strncpy': This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+capstone/arch/AArch64/AArch64InstPrinter.c(941): warning C4996: 'strncpy': This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+capstone/arch/AArch64/AArch64InstPrinter.c(954): warning C4996: 'strncpy': This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+capstone/arch/AArch64/AArch64InstPrinter.c(1606): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(1612): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(1641): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(1639): warning C4244: 'initializing': conversion from 'int64_t' to 'unsigned int', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(1651): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(1963): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(1966): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(1969): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2009): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2074): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2140): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2200): warning C4244: 'function': conversion from 'int64_t' to 'int', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2198): warning C4244: 'initializing': conversion from 'int64_t' to 'unsigned int', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2207): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2205): warning C4244: 'initializing': conversion from 'int64_t' to 'unsigned int', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2264): warning C4244: 'initializing': conversion from 'int64_t' to 'unsigned int', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2265): warning C4244: 'initializing': conversion from 'int64_t' to 'unsigned int', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2284): warning C4244: 'initializing': conversion from 'int64_t' to 'unsigned int', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2285): warning C4244: 'initializing': conversion from 'int64_t' to 'unsigned int', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2308): warning C4244: 'function': conversion from 'uint64_t' to 'int16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2318): warning C4244: 'function': conversion from 'uint64_t' to 'int16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2351): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2352): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+capstone/arch/AArch64/AArch64InstPrinter.c(2353): warning C4244: 'initializing': conversion from 'int64_t' to 'unsigned int', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64GenAsmWriter.inc(24027): warning C4310: cast truncates constant value
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64GenAsmWriter.inc(24290): warning C4244: 'function': conversion from 'int64_t' to 'uint16_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64InstPrinter.c(1621) : warning C4702: unreachable code
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\AArch64\AArch64InstPrinter.c(1626) : warning C4702: unreachable code
+AArch64Mapping.c
+AArch64Module.c
+ARMDisassembler.c
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\ARM\ARMBaseInfo.h(471): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\ARM\ARMGenDisassemblerTables.inc(15180): warning C4244: '=': conversion from 'uint64_t' to 'uint16_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\ARM\ARMGenDisassemblerTables.inc(15180): warning C4244: '=': conversion from 'uint64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\ARM\ARMGenDisassemblerTables.inc(15180): warning C4244: '=': conversion from 'uint64_t' to 'unsigned int', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\ARM\ARMGenDisassemblerTables.inc(15183): warning C4244: 'function': conversion from 'uint32_t' to 'uint16_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\ARM\ARMGenDisassemblerTables.inc(15184): warning C4244: '=': conversion from 'uint64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\ARM\ARMGenDisassemblerTables.inc(15184): warning C4244: '=': conversion from 'uint64_t' to 'unsigned int', possible loss of data
+capstone/arch/ARM/ARMDisassembler.c(2432): warning C4244: 'function': conversion from 'unsigned int' to 'unsigned char', possible loss of data
+capstone/arch/ARM/ARMDisassembler.c(2434): warning C4244: 'function': conversion from 'unsigned int' to 'unsigned char', possible loss of data
+capstone/arch/ARM/ARMDisassembler.c(4485): warning C4244: 'function': conversion from 'unsigned int' to 'uint8_t', possible loss of data
+ARMInstPrinter.c
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\ARM\ARMBaseInfo.h(471): warning C4244: 'function': conversion from 'unsigned int' to 'uint16_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\ARM\ARMGenAsmWriter.inc(9510): warning C4310: cast truncates constant value
+capstone/arch/ARM/ARMInstPrinter.c(737): warning C4456: declaration of 'i' hides previous local declaration
+capstone/arch/ARM/ARMInstPrinter.c(450): note: see declaration of 'i'
+capstone/arch/ARM/ARMInstPrinter.c(1830): warning C4244: 'function': conversion from 'uint32_t' to 'uint8_t', possible loss of data
+ARMMapping.c
+capstone/arch/ARM/ARMMapping.c(292): warning C4245: 'return': conversion from 'int' to 'unsigned int', signed/unsigned mismatch
+capstone/arch/ARM/ARMMapping.c(310): warning C4245: 'return': conversion from 'int' to 'unsigned int', signed/unsigned mismatch
+ARMModule.c
+BPFDisassembler.c
+capstone/arch/BPF/BPFDisassembler.c(459): warning C4206: nonstandard extension used: translation unit is empty
+BPFInstPrinter.c
+BPFMapping.c
+capstone/arch/BPF/BPFMapping.c(459): warning C4244: '=': conversion from 'int' to 'uint16_t', possible loss of data
+BPFModule.c
+capstone/arch/BPF/BPFModule.c(35): warning C4206: nonstandard extension used: translation unit is empty
+EVMDisassembler.c
+EVMInstPrinter.c
+EVMMapping.c
+capstone/arch/EVM/EVMMapping.c(21): warning C4459: declaration of 'insns' hides global declaration
+capstone/arch/EVM/EVMMapping.c(14): note: see declaration of 'insns'
+EVMModule.c
+M680XDisassembler.c
+capstone/arch/M680X/M680XDisassembler.c(851): warning C4244: '+=': conversion from 'int' to 'uint16_t', possible loss of data
+capstone/arch/M680X/M680XDisassembler.c(865): warning C4244: '+=': conversion from 'int' to 'uint16_t', possible loss of data
+capstone/arch/M680X/M680XDisassembler.c(875): warning C4244: '+=': conversion from 'int' to 'uint16_t', possible loss of data
+capstone/arch/M680X/M680XDisassembler.c(887): warning C4244: '+=': conversion from 'int' to 'uint16_t', possible loss of data
+capstone/arch/M680X/M680XDisassembler.c(921): warning C4244: '+=': conversion from 'int' to 'uint16_t', possible loss of data
+capstone/arch/M680X/M680XDisassembler.c(929): warning C4244: '+=': conversion from 'int' to 'uint16_t', possible loss of data
+capstone/arch/M680X/M680XDisassembler.c(1601): warning C4245: 'initializing': conversion from 'int' to 'const uint8_t', signed/unsigned mismatch
+capstone/arch/M680X/M680XDisassembler.c(1604): warning C4245: 'initializing': conversion from 'int' to 'const uint8_t', signed/unsigned mismatch
+M680XInstPrinter.c
+M680XModule.c
+M68KDisassembler.c
+capstone/arch/M68K/M68KDisassembler.c(198): warning C4245: 'return': conversion from '__int64' to 'uint64_t', signed/unsigned mismatch
+capstone/arch/M68K/M68KDisassembler.c(225): warning C4132: 'g_instruction_table': const object should be initialized
+capstone/arch/M68K/M68KDisassembler.c(746): warning C4244: '=': conversion from 'int' to 'uint8_t', possible loss of data
+capstone/arch/M68K/M68KDisassembler.c(880): warning C4244: 'return': conversion from 'uint32_t' to 'uint16_t', possible loss of data
+capstone/arch/M68K/M68KDisassembler.c(894): warning C4244: 'return': conversion from 'uint32_t' to 'uint8_t', possible loss of data
+capstone/arch/M68K/M68KDisassembler.c(1778): warning C4244: '=': conversion from 'int' to 'uint8_t', possible loss of data
+capstone/arch/M68K/M68KDisassembler.c(1941): warning C4456: declaration of 'op0' hides previous local declaration
+capstone/arch/M68K/M68KDisassembler.c(1920): note: see declaration of 'op0'
+capstone/arch/M68K/M68KDisassembler.c(1942): warning C4456: declaration of 'op1' hides previous local declaration
+capstone/arch/M68K/M68KDisassembler.c(1921): note: see declaration of 'op1'
+capstone/arch/M68K/M68KDisassembler.c(1943): warning C4456: declaration of 'ext' hides previous local declaration
+capstone/arch/M68K/M68KDisassembler.c(1919): note: see declaration of 'ext'
+M68KInstPrinter.c
+capstone/arch/M68K/M68KInstPrinter.c(279): warning C4244: '=': conversion from 'int' to 'uint8_t', possible loss of data
+capstone/arch/M68K/M68KInstPrinter.c(282): warning C4244: '=': conversion from 'int' to 'uint8_t', possible loss of data
+capstone/arch/M68K/M68KInstPrinter.c(285): warning C4244: '=': conversion from 'int' to 'uint8_t', possible loss of data
+M68KModule.c
+MOS65XXDisassembler.c
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\include\capstone/mos65xx.h(186): warning C4201: nonstandard extension used: nameless struct/union
+capstone/arch/MOS65XX/MOS65XXDisassembler.c(206): warning C4244: '=': conversion from 'int64_t' to 'uint16_t', possible loss of data
+capstone/arch/MOS65XX/MOS65XXDisassembler.c(229): warning C4244: '=': conversion from 'int64_t' to 'uint32_t', possible loss of data
+capstone/arch/MOS65XX/MOS65XXDisassembler.c(238): warning C4244: '=': conversion from 'int64_t' to 'uint32_t', possible loss of data
+capstone/arch/MOS65XX/MOS65XXDisassembler.c(215): warning C4244: 'initializing': conversion from 'int64_t' to 'int', possible loss of data
+capstone/arch/MOS65XX/MOS65XXDisassembler.c(270): warning C4244: '=': conversion from 'int64_t' to 'unsigned int', possible loss of data
+capstone/arch/MOS65XX/MOS65XXDisassembler.c(421): warning C4244: '=': conversion from 'int' to 'unsigned char', possible loss of data
+MOS65XXModule.c
+capstone/arch/MOS65XX/MOS65XXModule.c(80): warning C4206: nonstandard extension used: translation unit is empty
+MipsDisassembler.c
+MipsInstPrinter.c
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\Mips\MipsGenAsmWriter.inc(5709): warning C4310: cast truncates constant value
+MipsMapping.c
+MipsModule.c
+PPCDisassembler.c
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\PowerPC\PPCGenDisassemblerTables.inc(6687): warning C4244: '=': conversion from 'uint64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\PowerPC\PPCGenDisassemblerTables.inc(6687): warning C4244: '=': conversion from 'uint64_t' to 'unsigned int', possible loss of data
+PPCInstPrinter.c
+capstone/arch/PowerPC/PPCInstPrinter.c(387): warning C4310: cast truncates constant value
+capstone/arch/PowerPC/PPCInstPrinter.c(1017): warning C4244: 'function': conversion from 'int64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\PowerPC\PPCGenAsmWriter.inc(11205): warning C4310: cast truncates constant value
+PPCMapping.c
+PPCModule.c
+RISCVDisassembler.c
+capstone/arch/RISCV/RISCVDisassembler.c(297): warning C4244: 'function': conversion from 'uint64_t' to 'unsigned int', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\RISCV\RISCVGenDisassemblerTables.inc(1776): warning C4244: 'initializing': conversion from 'uint64_t' to 'uint32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\RISCV\RISCVGenDisassemblerTables.inc(1776): warning C4244: 'initializing': conversion from 'uint64_t' to 'unsigned int', possible loss of data
+RISCVInstPrinter.c
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\RISCV\RISCVGenAsmWriter.inc(2565): warning C4267: '=': conversion from 'size_t' to 'unsigned int', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\RISCV\RISCVGenAsmWriter.inc(2589): warning C4310: cast truncates constant value
+capstone/arch/RISCV/RISCVInstPrinter.c(408): warning C4244: 'initializing': conversion from 'int64_t' to 'unsigned int', possible loss of data
+capstone/arch/RISCV/RISCVInstPrinter.c(420): warning C4244: 'initializing': conversion from 'int64_t' to 'unsigned int', possible loss of data
+RISCVMapping.c
+RISCVModule.c
+SparcDisassembler.c
+SparcInstPrinter.c
+capstone/arch/Sparc/SparcInstPrinter.c(221): warning C4244: 'function': conversion from 'int64_t' to 'uint32_t', possible loss of data
+capstone/arch/Sparc/SparcInstPrinter.c(232): warning C4244: 'function': conversion from 'int64_t' to 'uint32_t', possible loss of data
+capstone/arch/Sparc/SparcInstPrinter.c(261): warning C4244: 'function': conversion from 'int64_t' to 'uint32_t', possible loss of data
+capstone/arch/Sparc/SparcInstPrinter.c(270): warning C4244: '=': conversion from 'int64_t' to 'int32_t', possible loss of data
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\capstone-sys-0.16.0\capstone\arch\Sparc\SparcGenAsmWriter.inc(5693): warning C4310: cast truncates constant value
+SparcMapping.c
+SparcModule.c
+SystemZDisassembler.c
+SystemZInstPrinter.c
+capstone/arch/SystemZ/SystemZInstPrinter.c(388): warning C4244: 'function': conversion from 'uint64_t' to 'unsigned int', possible loss of data
+capstone/arch/SystemZ/SystemZInstPrinter.c(397): warning C4244: 'function': conversion from 'uint64_t' to 'unsigned int', possible loss of data
+SystemZMCTargetDesc.c
+SystemZMapping.c
+SystemZModule.c
+TMS320C64xDisassembler.c
+capstone/arch/TMS320C64x/TMS320C64xDisassembler.c(473): warning C4245: '=': conversion from 'int' to 'unsigned int', signed/unsigned mismatch
+capstone/arch/TMS320C64x/TMS320C64xDisassembler.c(505): warning C4245: '=': conversion from 'int' to 'unsigned int', signed/unsigned mismatch
+capstone/arch/TMS320C64x/TMS320C64xDisassembler.c(537): warning C4245: '=': conversion from 'int' to 'unsigned int', signed/unsigned mismatch
+capstone/arch/TMS320C64x/TMS320C64xDisassembler.c(569): warning C4245: '=': conversion from 'int' to 'unsigned int', signed/unsigned mismatch
+TMS320C64xInstPrinter.c
+capstone/arch/TMS320C64x/TMS320C64xInstPrinter.c(172): warning C4244: '=': conversion from 'int64_t' to 'int32_t', possible loss of data
+TMS320C64xMapping.c
+TMS320C64xModule.c
+WASMDisassembler.c
+capstone/arch/WASM/WASMDisassembler.c(282): warning C4245: '=': conversion from 'int' to 'size_t', signed/unsigned mismatch
+capstone/arch/WASM/WASMDisassembler.c(288): warning C4245: '=': conversion from 'int' to 'size_t', signed/unsigned mismatch
+capstone/arch/WASM/WASMDisassembler.c(315): warning C4245: '=': conversion from 'int' to 'size_t', signed/unsigned mismatch
+capstone/arch/WASM/WASMDisassembler.c(320): warning C4245: '=': conversion from 'int' to 'size_t', signed/unsigned mismatch
+capstone/arch/WASM/WASMDisassembler.c(360): warning C4245: '=': conversion from 'int' to 'size_t', signed/unsigned mismatch
+capstone/arch/WASM/WASMDisassembler.c(393): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+capstone/arch/WASM/WASMDisassembler.c(397): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+capstone/arch/WASM/WASMDisassembler.c(400): warning C4267: '=': conversion from 'size_t' to 'uint16_t', possible loss of data
+capstone/arch/WASM/WASMDisassembler.c(423): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+capstone/arch/WASM/WASMDisassembler.c(427): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+capstone/arch/WASM/WASMDisassembler.c(430): warning C4267: '=': conversion from 'size_t' to 'uint16_t', possible loss of data
+capstone/arch/WASM/WASMDisassembler.c(456): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+capstone/arch/WASM/WASMDisassembler.c(468): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+capstone/arch/WASM/WASMDisassembler.c(473): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+capstone/arch/WASM/WASMDisassembler.c(477): warning C4267: '=': conversion from 'size_t' to 'uint16_t', possible loss of data
+capstone/arch/WASM/WASMDisassembler.c(553): warning C4267: '+=': conversion from 'size_t' to 'int', possible loss of data
+capstone/arch/WASM/WASMDisassembler.c(574): warning C4018: '<': signed/unsigned mismatch
+capstone/arch/WASM/WASMDisassembler.c(584): warning C4267: '+=': conversion from 'size_t' to 'int', possible loss of data
+capstone/arch/WASM/WASMDisassembler.c(595): warning C4267: '=': conversion from 'size_t' to 'uint16_t', possible loss of data
+capstone/arch/WASM/WASMDisassembler.c(627): warning C4267: '=': conversion from 'size_t' to 'uint16_t', possible loss of data
+WASMInstPrinter.c
+WASMMapping.c
+WASMModule.c
+X86ATTInstPrinter.c
+capstone/arch/X86/X86ATTInstPrinter.c(338): warning C4244: 'function': conversion from 'int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86ATTInstPrinter.c(461): warning C4244: 'function': conversion from 'int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86ATTInstPrinter.c(564): warning C4244: 'function': conversion from 'unsigned int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86ATTInstPrinter.c(569): warning C4244: 'function': conversion from 'unsigned int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86ATTInstPrinter.c(570): warning C4244: 'function': conversion from 'unsigned int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86ATTInstPrinter.c(720): warning C4244: 'function': conversion from 'unsigned int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86ATTInstPrinter.c(722): warning C4244: 'function': conversion from 'unsigned int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86ATTInstPrinter.c(738): warning C4244: 'function': conversion from 'int' to 'unsigned short', possible loss of data
+X86Disassembler.c
+X86DisassemblerDecoder.c
+capstone/arch/X86/X86DisassemblerDecoder.c(1401): warning C4244: '=': conversion from 'uint64_t' to 'uint8_t', possible loss of data
+capstone/arch/X86/X86DisassemblerDecoder.c(1676): warning C4244: 'return': conversion from 'int' to 'uint16_t', possible loss of data
+capstone/arch/X86/X86DisassemblerDecoder.c(1677): warning C4244: 'return': conversion from 'int' to 'uint16_t', possible loss of data
+capstone/arch/X86/X86DisassemblerDecoder.c(1708): warning C4244: 'function': conversion from 'int' to 'uint8_t', possible loss of data
+capstone/arch/X86/X86DisassemblerDecoder.c(1717): warning C4244: 'function': conversion from 'int' to 'uint8_t', possible loss of data
+capstone/arch/X86/X86DisassemblerDecoder.c(1802): warning C4244: '=': conversion from 'uint64_t' to 'uint8_t', possible loss of data
+capstone/arch/X86/X86DisassemblerDecoder.c(1951): warning C4334: '<<': result of 32-bit shift implicitly converted to 64 bits (was 64-bit shift intended?)
+capstone/arch/X86/X86DisassemblerDecoder.c(1964): warning C4334: '<<': result of 32-bit shift implicitly converted to 64 bits (was 64-bit shift intended?)
+X86InstPrinterCommon.c
+X86IntelInstPrinter.c
+capstone/arch/X86/X86IntelInstPrinter.c(483): warning C4244: 'function': conversion from 'int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86IntelInstPrinter.c(618): warning C4244: 'function': conversion from 'int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86IntelInstPrinter.c(810): warning C4244: 'function': conversion from 'unsigned int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86IntelInstPrinter.c(817): warning C4244: 'function': conversion from 'unsigned int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86IntelInstPrinter.c(818): warning C4244: 'function': conversion from 'unsigned int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86IntelInstPrinter.c(830): warning C4244: 'function': conversion from 'unsigned int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86IntelInstPrinter.c(946): warning C4244: 'function': conversion from 'unsigned int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86IntelInstPrinter.c(948): warning C4244: 'function': conversion from 'unsigned int' to 'unsigned short', possible loss of data
+capstone/arch/X86/X86IntelInstPrinter.c(964): warning C4244: 'function': conversion from 'int' to 'unsigned short', possible loss of data
+X86Mapping.c
+capstone/arch/X86/X86Mapping.c(27): warning C4245: 'initializing': conversion from '__int64' to 'const uint64_t', signed/unsigned mismatch
+capstone/arch/X86/X86Mapping.c(991): warning C4245: 'return': conversion from 'int' to 'unsigned int', signed/unsigned mismatch
+capstone/arch/X86/X86Mapping.c(1009): warning C4245: 'return': conversion from 'int' to 'unsigned int', signed/unsigned mismatch
+capstone/arch/X86/X86Mapping.c(1460): warning C4459: declaration of 'insns' hides global declaration
+capstone/arch/X86/X86Mapping.c(959): note: see declaration of 'insns'
+capstone/arch/X86/X86Mapping.c(1489): warning C4459: declaration of 'insns' hides global declaration
+capstone/arch/X86/X86Mapping.c(959): note: see declaration of 'insns'
+X86Module.c
+XCoreDisassembler.c
+XCoreInstPrinter.c
+XCoreMapping.c
+XCoreModule.c
+cs.c
+capstone/cs.c(292): warning C4232: nonstandard extension used: 'cs_mem_malloc': address of dllimport 'malloc' is not static, identity not guaranteed
+C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_malloc.h(101): note: see declaration of 'malloc'
+capstone/cs.c(293): warning C4232: nonstandard extension used: 'cs_mem_calloc': address of dllimport 'calloc' is not static, identity not guaranteed
+C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_malloc.h(66): note: see declaration of 'calloc'
+capstone/cs.c(294): warning C4232: nonstandard extension used: 'cs_mem_realloc': address of dllimport 'realloc' is not static, identity not guaranteed
+C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_malloc.h(126): note: see declaration of 'realloc'
+capstone/cs.c(295): warning C4232: nonstandard extension used: 'cs_mem_free': address of dllimport 'free' is not static, identity not guaranteed
+C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\corecrt_malloc.h(89): note: see declaration of 'free'
+utils.c
+capstone/utils.c(151): warning C4245: 'return': conversion from 'int' to 'unsigned int', signed/unsigned mismatch
+capstone/utils.c(158): warning C4267: 'return': conversion from 'size_t' to 'unsigned int', possible loss of data
+capstone/utils.c(168): warning C4245: 'return': conversion from 'int' to 'unsigned int', signed/unsigned mismatch
+cargo:rerun-if-env-changed=AR_x86_64-pc-windows-msvc
+AR_x86_64-pc-windows-msvc = None
+cargo:rerun-if-env-changed=AR_x86_64_pc_windows_msvc
+AR_x86_64_pc_windows_msvc = None
+cargo:rerun-if-env-changed=HOST_AR
+HOST_AR = None
+cargo:rerun-if-env-changed=AR
+AR = None
+cargo:rerun-if-env-changed=ARFLAGS
+ARFLAGS = None
+cargo:rerun-if-env-changed=HOST_ARFLAGS
+HOST_ARFLAGS = None
+cargo:rerun-if-env-changed=ARFLAGS_x86_64_pc_windows_msvc
+ARFLAGS_x86_64_pc_windows_msvc = None
+cargo:rerun-if-env-changed=ARFLAGS_x86_64-pc-windows-msvc
+ARFLAGS_x86_64-pc-windows-msvc = None
+cargo:rustc-link-search=native=C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.50.35717\atlmfc\lib\x64
+cargo:rustc-link-lib=static=capstone
+cargo:rustc-link-search=native=C:\Users\Administrator\Desktop\vibe\target\debug\build\capstone-sys-b7468e6f22a2cd52\out
+cargo:rustc-link-lib=static=capstone

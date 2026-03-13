@@ -1,0 +1,10 @@
+C:\Users\Administrator\Desktop\vibe\target\debug\deps\ecolor-abeb3bdfa0f879fa.d: C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\lib.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\color32.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\hsva_gamma.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\hsva.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\rgba.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\hex_color_runtime.rs
+
+C:\Users\Administrator\Desktop\vibe\target\debug\deps\libecolor-abeb3bdfa0f879fa.rmeta: C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\lib.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\color32.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\hsva_gamma.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\hsva.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\rgba.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\hex_color_runtime.rs
+
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\lib.rs:
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\color32.rs:
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\hsva_gamma.rs:
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\hsva.rs:
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\rgba.rs:
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.3\src\hex_color_runtime.rs:

@@ -1,0 +1,19 @@
+[package]
+name = "vibe-analyzer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+capstone = "0.12"
+eframe = "0.33"
+egui = "0.33"
+egui_extras = "0.33"
+flate2 = "1.1"
+goblin = "0.9"
+md-5 = "0.10"
+rfd = "0.15"
+sha1 = "0.10"
+sha2 = "0.10"
+tar = "0.4"
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
