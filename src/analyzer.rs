@@ -3,6 +3,10 @@ use capstone::prelude::*;
 use flate2::read::GzDecoder;
 use goblin::{mach::Mach, pe::PE, Object};
 use md5::Md5;
+use pelite::{
+    resources::{version_info::VersionInfo, Directory as ResourceDirectory, Entry as ResourceKind},
+    PeFile,
+};
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -43,6 +47,11 @@ pub struct BinaryReport {
     pub optional_header: Vec<KeyValueRow>,
     pub disassembly: Vec<DisassembledInstruction>,
     pub archive_entries: Vec<ArchiveEntry>,
+    pub resource_entries: Vec<ResourceEntry>,
+    pub version_info_rows: Vec<KeyValueRow>,
+    pub pe_metadata_rows: Vec<KeyValueRow>,
+    pub manifest_rows: Vec<KeyValueRow>,
+    pub manifest_text: Option<String>,
     pub notes: Vec<String>,
     pub protections: ProtectionFlags,
     pub protection_findings: Vec<ProtectionFinding>,
@@ -107,6 +116,16 @@ pub struct ArchiveEntry {
     pub name: String,
     pub kind: String,
     pub size: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct ResourceEntry {
+    pub depth: usize,
+    pub name: String,
+    pub path: String,
+    pub kind: String,
+    pub size: usize,
+    pub code_page: u32,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -243,6 +262,11 @@ fn base_report(path: PathBuf, buffer: &[u8]) -> BinaryReport {
         }],
         disassembly: Vec::new(),
         archive_entries: Vec::new(),
+        resource_entries: Vec::new(),
+        version_info_rows: Vec::new(),
+        pe_metadata_rows: Vec::new(),
+        manifest_rows: Vec::new(),
+        manifest_text: None,
         notes: vec!["Static heuristic scan completed.".to_string()],
         protections: ProtectionFlags::default(),
         protection_findings: Vec::new(),
@@ -266,7 +290,7 @@ fn populate_pe_report(report: &mut BinaryReport, pe: &PE, buffer: &[u8]) -> Resu
     report.section_count = header.coff_header.number_of_sections as usize;
     report.is_64bit = pe.is_64;
     report.subsystem = decode_subsystem(optional.windows_fields.subsystem).to_string();
-    report.image_base = optional.windows_fields.image_base as u64;
+    report.image_base = optional.windows_fields.image_base;
     report.entry_point = optional.standard_fields.address_of_entry_point;
     report.section_alignment = optional.windows_fields.section_alignment;
     report.file_alignment = optional.windows_fields.file_alignment;
@@ -440,9 +464,12 @@ fn populate_pe_report(report: &mut BinaryReport, pe: &PE, buffer: &[u8]) -> Resu
         },
     ];
 
+    report.pe_metadata_rows = build_pe_metadata_rows(pe, buffer, optional);
+
     report.disassembly = disassemble_entry_block(pe, buffer, optional.standard_fields.address_of_entry_point)?;
     report.protections = build_pe_protections(pe, optional.windows_fields.dll_characteristics);
     report.protection_findings = build_protection_findings(report, pe);
+    populate_pe_resources(report, buffer);
 
     if report.sections.iter().any(|section| section.entropy >= 7.2) {
         report
@@ -451,6 +478,320 @@ fn populate_pe_report(report: &mut BinaryReport, pe: &PE, buffer: &[u8]) -> Resu
     }
 
     Ok(())
+}
+
+fn populate_pe_resources(report: &mut BinaryReport, buffer: &[u8]) {
+    let pe_file = match PeFile::from_bytes(buffer) {
+        Ok(file) => file,
+        Err(err) => {
+            report
+                .notes
+                .push(format!("PE resource parser could not initialize: {err}"));
+            return;
+        }
+    };
+
+    let resources = match pe_file.resources() {
+        Ok(resources) => resources,
+        Err(_) => return,
+    };
+
+    if let Err(err) = resources.fsck() {
+        report
+            .notes
+            .push(format!("Resources directory integrity issue detected: {err}"));
+    }
+
+    match resources.root() {
+        Ok(root) => collect_resource_entries(root, 0, String::new(), &mut report.resource_entries),
+        Err(err) => report
+            .notes
+            .push(format!("Resources directory exists but could not be enumerated: {err}")),
+    }
+
+    if let Ok(version_info) = resources.version_info() {
+        report.version_info_rows = build_version_info_rows(version_info);
+    }
+
+    if let Ok(manifest) = resources.manifest() {
+        let manifest = manifest.trim().to_string();
+        report.manifest_rows = build_manifest_rows(&manifest);
+        report.manifest_text = Some(manifest.clone());
+
+        if let Some(level) = manifest_execution_level(&manifest) {
+            report.notes.push(format!("Application manifest requests `{level}` execution level."));
+        }
+    }
+}
+
+fn collect_resource_entries(
+    directory: ResourceDirectory<'_>,
+    depth: usize,
+    prefix: String,
+    output: &mut Vec<ResourceEntry>,
+) {
+    for entry in directory.entries() {
+        let name = entry
+            .name()
+            .map(|value| value.to_string())
+            .unwrap_or_else(|_| "<invalid>".to_string());
+        let path = if prefix.is_empty() {
+            format!("/{name}")
+        } else {
+            format!("{prefix}/{name}")
+        };
+
+        match entry.entry() {
+            Ok(ResourceKind::Directory(child)) => {
+                output.push(ResourceEntry {
+                    depth,
+                    name: name.clone(),
+                    path: path.clone(),
+                    kind: "Directory".to_string(),
+                    size: 0,
+                    code_page: 0,
+                });
+                collect_resource_entries(child, depth + 1, path, output);
+            }
+            Ok(ResourceKind::DataEntry(data)) => {
+                output.push(ResourceEntry {
+                    depth,
+                    name,
+                    path,
+                    kind: "Data".to_string(),
+                    size: data.size(),
+                    code_page: data.code_page(),
+                });
+            }
+            Err(err) => output.push(ResourceEntry {
+                depth,
+                name,
+                path,
+                kind: format!("Error: {err}"),
+                size: 0,
+                code_page: 0,
+            }),
+        }
+    }
+}
+
+fn build_version_info_rows(version_info: VersionInfo<'_>) -> Vec<KeyValueRow> {
+    let mut rows = Vec::new();
+
+    if let Some(fixed) = version_info.fixed() {
+        rows.push(KeyValueRow {
+            key: "FileVersion".to_string(),
+            value: format!(
+                "{}.{}.{}.{}",
+                fixed.dwFileVersion.Major,
+                fixed.dwFileVersion.Minor,
+                fixed.dwFileVersion.Patch,
+                fixed.dwFileVersion.Build
+            ),
+        });
+        rows.push(KeyValueRow {
+            key: "ProductVersion".to_string(),
+            value: format!(
+                "{}.{}.{}.{}",
+                fixed.dwProductVersion.Major,
+                fixed.dwProductVersion.Minor,
+                fixed.dwProductVersion.Patch,
+                fixed.dwProductVersion.Build
+            ),
+        });
+        rows.push(KeyValueRow {
+            key: "FileFlagsMask".to_string(),
+            value: format!("0x{:X}", fixed.dwFileFlagsMask),
+        });
+        rows.push(KeyValueRow {
+            key: "FileFlags".to_string(),
+            value: format!("0x{:X}", fixed.dwFileFlags),
+        });
+        rows.push(KeyValueRow {
+            key: "FileOS".to_string(),
+            value: format!("0x{:X}", fixed.dwFileOS),
+        });
+        rows.push(KeyValueRow {
+            key: "FileType".to_string(),
+            value: format!("0x{:X}", fixed.dwFileType),
+        });
+        rows.push(KeyValueRow {
+            key: "FileSubtype".to_string(),
+            value: format!("0x{:X}", fixed.dwFileSubtype),
+        });
+    }
+
+    let translations = version_info.translation();
+    if !translations.is_empty() {
+        rows.push(KeyValueRow {
+            key: "Translations".to_string(),
+            value: translations
+                .iter()
+                .map(|lang| lang.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+        });
+    }
+
+    let file_info = version_info.file_info();
+    let mut languages = file_info.strings.into_iter().collect::<Vec<_>>();
+    languages.sort_by_key(|(lang, _)| lang.to_string());
+
+    for (language, map) in languages {
+        let mut string_rows = map.into_iter().collect::<Vec<_>>();
+        string_rows.sort_by(|a, b| a.0.cmp(&b.0));
+
+        for (key, value) in string_rows {
+            rows.push(KeyValueRow {
+                key: format!("[{language}] {key}"),
+                value,
+            });
+        }
+    }
+
+    rows
+}
+
+fn build_manifest_rows(manifest: &str) -> Vec<KeyValueRow> {
+    let manifest_lower = manifest.to_ascii_lowercase();
+    let execution_level = manifest_execution_level(manifest).unwrap_or("Not declared");
+    let auto_elevate = contains_any(&manifest_lower, &["<autoelevate>true</autoelevate>"]);
+    let long_path = contains_any(&manifest_lower, &["<longpathaware>true</longpathaware>"]);
+    let dpi_aware = contains_any(
+        &manifest_lower,
+        &[
+            "<dpiaware>true",
+            "<dpiawareness>",
+            "<gdiscaling>true</gdiscaling>",
+        ],
+    );
+    let ui_access = contains_any(&manifest_lower, &["uiaccess='true'", "uiaccess=\"true\""]);
+
+    vec![
+        KeyValueRow {
+            key: "Execution Level".to_string(),
+            value: execution_level.to_string(),
+        },
+        KeyValueRow {
+            key: "Auto Elevate".to_string(),
+            value: bool_badge(auto_elevate).to_string(),
+        },
+        KeyValueRow {
+            key: "Long Path Aware".to_string(),
+            value: bool_badge(long_path).to_string(),
+        },
+        KeyValueRow {
+            key: "DPI Aware".to_string(),
+            value: bool_badge(dpi_aware).to_string(),
+        },
+        KeyValueRow {
+            key: "UI Access".to_string(),
+            value: bool_badge(ui_access).to_string(),
+        },
+    ]
+}
+
+fn manifest_execution_level(manifest: &str) -> Option<&'static str> {
+    let lower = manifest.to_ascii_lowercase();
+    if lower.contains("requireadministrator") {
+        Some("requireAdministrator")
+    } else if lower.contains("highestavailable") {
+        Some("highestAvailable")
+    } else if lower.contains("asinvoker") {
+        Some("asInvoker")
+    } else {
+        None
+    }
+}
+
+fn contains_any(haystack: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| haystack.contains(needle))
+}
+
+fn bool_badge(value: bool) -> &'static str {
+    if value {
+        "Enabled"
+    } else {
+        "Disabled"
+    }
+}
+
+fn build_pe_metadata_rows(
+    pe: &PE,
+    buffer: &[u8],
+    optional: &goblin::pe::optional_header::OptionalHeader,
+) -> Vec<KeyValueRow> {
+    let directories = &optional.data_directories;
+    let mut rows = vec![
+        KeyValueRow {
+            key: "Overlay".to_string(),
+            value: match file_overlay_size(pe, buffer, optional) {
+                0 => "None".to_string(),
+                size => format!("{size} bytes"),
+            },
+        },
+        KeyValueRow {
+            key: "Certificate Table".to_string(),
+            value: match directories.get_certificate_table() {
+                Some(entry) => format!("Present (size 0x{:X})", entry.size),
+                None => "Missing".to_string(),
+            },
+        },
+        KeyValueRow {
+            key: "Delay Imports".to_string(),
+            value: bool_badge(directories.get_delay_import_descriptor().is_some()).to_string(),
+        },
+        KeyValueRow {
+            key: "CLR Header".to_string(),
+            value: bool_badge(directories.get_clr_runtime_header().is_some()).to_string(),
+        },
+        KeyValueRow {
+            key: "Load Config".to_string(),
+            value: bool_badge(directories.get_load_config_table().is_some()).to_string(),
+        },
+        KeyValueRow {
+            key: "Bound Imports".to_string(),
+            value: bool_badge(directories.get_bound_import_table().is_some()).to_string(),
+        },
+    ];
+
+    if let Ok(file) = PeFile::from_bytes(buffer) {
+        if let Ok(debug) = file.debug() {
+            rows.push(KeyValueRow {
+                key: "Debug Entries".to_string(),
+                value: debug.image().len().to_string(),
+            });
+            if let Some(pdb) = debug.pdb_file_name() {
+                rows.push(KeyValueRow {
+                    key: "PDB Path".to_string(),
+                    value: pdb.to_string(),
+                });
+            }
+        }
+    }
+
+    rows
+}
+
+fn file_overlay_size(
+    pe: &PE,
+    buffer: &[u8],
+    optional: &goblin::pe::optional_header::OptionalHeader,
+) -> usize {
+    let section_end = pe
+        .sections
+        .iter()
+        .map(|section| section.pointer_to_raw_data as usize + section.size_of_raw_data as usize)
+        .max()
+        .unwrap_or(0);
+    let certificate_end = optional
+        .data_directories
+        .get_certificate_table()
+        .map(|entry| entry.virtual_address as usize + entry.size as usize)
+        .unwrap_or(0);
+    let structured_end = section_end.max(certificate_end).min(buffer.len());
+
+    buffer.len().saturating_sub(structured_end)
 }
 
 fn populate_elf_report(report: &mut BinaryReport, elf: &goblin::elf::Elf, buffer: &[u8]) {
@@ -525,13 +866,12 @@ fn populate_mach_report(report: &mut BinaryReport, macho: &goblin::mach::MachO, 
     report.format_family = "Mach-O".to_string();
     report.detection_confidence = "Signature".to_string();
     report.is_64bit = macho.is_64;
-    report.entry_point = macho.entry as u64;
+    report.entry_point = macho.entry;
     report.subsystem = "Mach-O Binary".to_string();
 
     report.sections = macho
         .segments
         .sections()
-        .into_iter()
         .flatten()
         .filter_map(Result::ok)
         .map(|(section, _)| SectionInfo {
@@ -615,10 +955,8 @@ fn detect_file_format(path: &Path, bytes: &[u8]) -> DetectedFormat {
         return format_hit("COM", "DOS COM", "Heuristic", vec![".com extension with flat binary layout heuristic.".to_string()]);
     }
 
-    if extension == "tgz" || extension == "npm" {
-        if is_gzip(bytes) {
-            return format_hit("NPM", "Node Package Archive", "Heuristic", vec!["gzip-compressed package archive detected.".to_string()]);
-        }
+    if (extension == "tgz" || extension == "npm") && is_gzip(bytes) {
+        return format_hit("NPM", "Node Package Archive", "Heuristic", vec!["gzip-compressed package archive detected.".to_string()]);
     }
 
     if is_amiga_hunk(bytes) {
@@ -972,7 +1310,7 @@ fn build_protection_findings(report: &BinaryReport, pe: &PE) -> Vec<ProtectionFi
         }
     }
 
-    if report.imports.len() <= 2 && report.sections.len() > 0 {
+    if report.imports.len() <= 2 && !report.sections.is_empty() {
         findings.push(ProtectionFinding {
             title: "Low import count".to_string(),
             detail: "Very small import surface may indicate dynamic resolution or packing.".to_string(),

@@ -2,12 +2,14 @@ use crate::analyzer::{analyze_file, BinaryReport, KeyValueRow};
 use eframe::egui::{self, Color32, RichText, TextStyle, Ui};
 use egui_extras::{Column, TableBuilder};
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Instant;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ActiveTab {
     GeneralInfo,
+    Resources,
     Hex,
     Sections,
     Imports,
@@ -27,6 +29,7 @@ pub struct BlackpointApp {
     last_error: Option<String>,
     string_filter: String,
     hex_offset_input: String,
+    hex_rva_input: String,
     hex_status: Option<String>,
     strings_case_sensitive: bool,
     show_ascii_strings: bool,
@@ -35,6 +38,7 @@ pub struct BlackpointApp {
     analysis_receiver: Option<Receiver<Result<BinaryReport, String>>>,
     analyzing_since: Option<Instant>,
     analyzing_path: Option<PathBuf>,
+    recent_files: Vec<PathBuf>,
 }
 
 impl BlackpointApp {
@@ -48,6 +52,7 @@ impl BlackpointApp {
             last_error: None,
             string_filter: String::new(),
             hex_offset_input: "0x0".to_string(),
+            hex_rva_input: "0x0".to_string(),
             hex_status: None,
             strings_case_sensitive: false,
             show_ascii_strings: true,
@@ -56,6 +61,7 @@ impl BlackpointApp {
             analysis_receiver: None,
             analyzing_since: None,
             analyzing_path: None,
+            recent_files: Vec::new(),
         }
     }
 
@@ -76,10 +82,12 @@ impl BlackpointApp {
         self.loaded_file = Some(path.clone());
         self.analysis_receiver = Some(rx);
         self.analyzing_since = Some(Instant::now());
-        self.analyzing_path = Some(path);
+        self.analyzing_path = Some(path.clone());
         self.last_error = None;
         self.hex_status = None;
         self.hex_offset_input = "0x0".to_string();
+        self.hex_rva_input = "0x0".to_string();
+        self.push_recent_file(path.clone());
 
         std::thread::spawn(move || {
             let result = analyze_file(&analyze_path).map_err(|err| err.to_string());
@@ -129,6 +137,12 @@ impl BlackpointApp {
                 break;
             }
         }
+    }
+
+    fn push_recent_file(&mut self, path: PathBuf) {
+        self.recent_files.retain(|existing| existing != &path);
+        self.recent_files.insert(0, path);
+        self.recent_files.truncate(6);
     }
 
     fn render_title_bar(&mut self, ctx: &egui::Context) {
@@ -322,6 +336,20 @@ impl BlackpointApp {
                                 {
                                     self.pick_file();
                                 }
+
+                                if let Some(path) = &self.loaded_file {
+                                    ui.add_space(8.0);
+                                    ui.horizontal_wrapped(|ui| {
+                                        if ui.button("Copy Path").clicked() {
+                                            ctx.copy_text(path.display().to_string());
+                                        }
+
+                                        if ui.button("Open Folder").clicked() {
+                                            let folder = path.parent().unwrap_or(path.as_path());
+                                            let _ = Command::new("explorer").arg(folder).spawn();
+                                        }
+                                    });
+                                }
                             });
 
                         if let Some(error) = &self.last_error {
@@ -352,6 +380,7 @@ impl BlackpointApp {
 
                                 for (tab, label) in [
                                     (ActiveTab::GeneralInfo, "General Info"),
+                                    (ActiveTab::Resources, "Resources"),
                                     (ActiveTab::Headers, "Headers"),
                                     (ActiveTab::Hex, "Hex Viewer"),
                                     (ActiveTab::Sections, "Sections"),
@@ -370,6 +399,48 @@ impl BlackpointApp {
                                 }
                             });
 
+                        if !compact_sidebar && !self.recent_files.is_empty() {
+                            ui.add_space(12.0);
+                            egui::Frame::new()
+                                .fill(Color32::from_rgb(8, 11, 16))
+                                .corner_radius(egui::CornerRadius::same(22))
+                                .stroke(egui::Stroke::new(1.0, Color32::from_rgb(34, 42, 54)))
+                                .inner_margin(egui::Margin::same(12))
+                                .show(ui, |ui| {
+                                    ui.label(
+                                        RichText::new("Recent")
+                                            .small()
+                                            .color(Color32::from_rgb(140, 149, 160)),
+                                    );
+                                    ui.add_space(8.0);
+
+                                    let recent_files = self.recent_files.clone();
+                                    for path in recent_files {
+                                        let file_name = path
+                                            .file_name()
+                                            .and_then(|name| name.to_str())
+                                            .unwrap_or("Recent target");
+
+                                        if ui
+                                            .add(
+                                                egui::Button::new(
+                                                    RichText::new(file_name)
+                                                        .color(Color32::from_rgb(210, 216, 224)),
+                                                )
+                                                .fill(Color32::from_rgb(11, 15, 20))
+                                                .stroke(egui::Stroke::new(1.0, Color32::from_rgb(31, 39, 51)))
+                                                .corner_radius(egui::CornerRadius::same(14))
+                                                .min_size(egui::vec2(ui.available_width(), 32.0)),
+                                            )
+                                            .on_hover_text(path.display().to_string())
+                                            .clicked()
+                                        {
+                                            self.load_path(path.clone());
+                                        }
+                                    }
+                                });
+                        }
+
                         if !compact_sidebar {
                             ui.add_space(12.0);
                             egui::Frame::new()
@@ -385,7 +456,7 @@ impl BlackpointApp {
                                     );
                                     ui.add_space(4.0);
                                     ui.label(
-                                        RichText::new("Hex RVA/raw mapping, resources, heuristics, and symbol depth")
+                                        RichText::new("Resources, PE deep dives, YARA-friendly heuristics, and symbol depth")
                                             .small()
                                             .color(Color32::from_rgb(184, 191, 200)),
                                     );
@@ -418,9 +489,16 @@ impl BlackpointApp {
 
                         egui::ScrollArea::vertical()
                             .auto_shrink([false, false])
-                            .show(ui, |ui| match self.active_tab {
-                                ActiveTab::GeneralInfo => render_overview(ui, report),
-                                ActiveTab::Hex => render_hex_viewer(ui, report, &mut self.hex_offset_input, &mut self.hex_status),
+                    .show(ui, |ui| match self.active_tab {
+                        ActiveTab::GeneralInfo => render_overview(ui, report),
+                        ActiveTab::Resources => render_resources(ui, report),
+                        ActiveTab::Hex => render_hex_viewer(
+                            ui,
+                            report,
+                            &mut self.hex_offset_input,
+                            &mut self.hex_rva_input,
+                            &mut self.hex_status,
+                        ),
                                 ActiveTab::Sections => render_sections(ui, report),
                                 ActiveTab::Imports => render_imports(ui, report),
                                 ActiveTab::Exports => render_exports(ui, report),
@@ -589,7 +667,7 @@ fn render_empty_state(ui: &mut Ui) {
             .stroke(egui::Stroke::new(1.0, Color32::from_rgb(34, 42, 56)))
             .inner_margin(egui::Margin::same(32))
             .show(ui, |ui| {
-                ui.set_max_width((ui.available_width() - 24.0).max(320.0).min(620.0));
+                ui.set_max_width((ui.available_width() - 24.0).clamp(320.0, 620.0));
                 ui.label(
                     RichText::new("Static analysis for real binaries")
                         .size(if compact { 24.0 } else { 30.0 })
@@ -896,6 +974,7 @@ fn render_hex_viewer(
     ui: &mut Ui,
     report: &BinaryReport,
     hex_offset_input: &mut String,
+    hex_rva_input: &mut String,
     hex_status: &mut Option<String>,
 ) {
     render_panel_title(ui, "Hex Viewer", "Raw byte view with offset jump and synchronized ASCII preview");
@@ -922,6 +1001,9 @@ fn render_hex_viewer(
             if ui.button("Entry").clicked() {
                 let offset = raw_offset_for_entry(report).min(report.raw_bytes.len().saturating_sub(1));
                 *hex_offset_input = format!("0x{offset:X}");
+                if let Some(rva) = rva_from_raw_offset(report, offset) {
+                    *hex_rva_input = format!("0x{rva:X}");
+                }
                 *hex_status = Some(format!("Jumped near entry point at raw offset 0x{offset:X}"));
             }
 
@@ -951,9 +1033,56 @@ fn render_hex_viewer(
         }
     });
 
+    if report.format_name == "PE" && !report.sections.is_empty() {
+        ui.add_space(10.0);
+        framed_panel(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new("RVA").color(Color32::from_rgb(188, 195, 205)));
+                ui.add_sized(
+                    [if compact { (ui.available_width() - 120.0).max(140.0) } else { 180.0 }, 28.0],
+                    egui::TextEdit::singleline(hex_rva_input).hint_text("0x1130"),
+                );
+
+                if ui.button("Jump RVA").clicked() {
+                    match parse_offset_input(hex_rva_input, usize::MAX) {
+                        Ok(rva) => {
+                            if let Some(offset) = raw_offset_from_rva(report, rva as u64) {
+                                *hex_offset_input = format!("0x{offset:X}");
+                                *hex_rva_input = format!("0x{:X}", rva);
+                                *hex_status = Some(format!("RVA 0x{rva:X} resolved to raw offset 0x{offset:X}"));
+                            } else {
+                                *hex_status = Some(format!("RVA 0x{rva:X} does not map to a loaded section"));
+                            }
+                        }
+                        Err(err) => *hex_status = Some(err),
+                    }
+                }
+            });
+
+            ui.add_space(8.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new("Sections").color(Color32::from_rgb(188, 195, 205)));
+                for section in &report.sections {
+                    if ui.button(section.name.as_str()).clicked() {
+                        let offset = section.raw_address as usize;
+                        *hex_offset_input = format!("0x{offset:X}");
+                        *hex_rva_input = format!("0x{:X}", section.virtual_address);
+                        *hex_status = Some(format!(
+                            "Jumped to section {} at raw 0x{:X} / RVA 0x{:X}",
+                            section.name, section.raw_address, section.virtual_address
+                        ));
+                    }
+                }
+            });
+        });
+    }
+
     ui.add_space(10.0);
 
     let selected_offset = parse_offset_input(hex_offset_input, report.raw_bytes.len()).unwrap_or(0);
+    if let Some(rva) = rva_from_raw_offset(report, selected_offset) {
+        *hex_rva_input = format!("0x{rva:X}");
+    }
     let row_size = 16usize;
     let selected_row = selected_offset / row_size;
     let start_row = selected_row.saturating_sub(8);
@@ -961,6 +1090,30 @@ fn render_hex_viewer(
     let end_row = (start_row + 160).min(total_rows);
 
     framed_panel(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(
+                RichText::new(format!("Raw 0x{selected_offset:X}"))
+                    .small()
+                    .monospace()
+                    .color(Color32::from_rgb(152, 161, 174)),
+            );
+            if let Some(rva) = rva_from_raw_offset(report, selected_offset) {
+                ui.label(
+                    RichText::new(format!("RVA 0x{rva:X}"))
+                        .small()
+                        .monospace()
+                        .color(Color32::from_rgb(152, 161, 174)),
+                );
+            }
+            if let Some(section_name) = section_name_for_raw_offset(report, selected_offset) {
+                ui.label(
+                    RichText::new(section_name)
+                        .small()
+                        .color(Color32::from_rgb(207, 94, 57)),
+                );
+            }
+        });
+        ui.add_space(6.0);
         ui.label(
             RichText::new("Offset        Hex Bytes                                              ASCII")
                 .monospace()
@@ -1005,73 +1158,559 @@ fn render_hex_viewer(
     });
 }
 
+fn render_resources(ui: &mut Ui, report: &BinaryReport) {
+    render_panel_title(
+        ui,
+        "Resources",
+        "PE resource tree, version information, manifest signals, and embedded metadata",
+    );
+
+    if report.resource_entries.is_empty() && report.version_info_rows.is_empty() && report.manifest_text.is_none() {
+        framed_panel(ui, |ui| {
+            ui.label(
+                RichText::new("No PE resource directory was parsed for this target.")
+                    .color(Color32::from_rgb(140, 149, 160)),
+            );
+        });
+        return;
+    }
+
+    let width = ui.available_width();
+
+    let file_name = report
+        .path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("PE resources");
+    let architecture = if report.is_64bit { "64-bit" } else { "32-bit / n.a." };
+
+    framed_panel(ui, |ui| {
+        if width >= 1680.0 {
+            ui.columns(2, |columns| {
+                columns[0].vertical(|ui| {
+                    render_resource_identity(ui, report, file_name, architecture);
+                });
+                columns[1].vertical(|ui| {
+                    render_resource_snapshot(ui, report);
+                });
+            });
+        } else {
+            render_resource_identity(ui, report, file_name, architecture);
+            ui.add_space(14.0);
+            render_resource_snapshot(ui, report);
+        }
+    });
+
+    ui.add_space(12.0);
+
+    if width >= 1760.0 {
+        ui.columns(2, |columns| {
+            render_resource_tree_panel(&mut columns[0], report);
+            render_resource_detail_stack(&mut columns[1], report);
+        });
+    } else {
+        render_resource_tree_panel(ui, report);
+        ui.add_space(12.0);
+        render_resource_detail_stack(ui, report);
+    }
+}
+
+fn render_resource_identity(ui: &mut Ui, report: &BinaryReport, file_name: &str, architecture: &str) {
+    ui.label(
+        RichText::new(file_name)
+            .size(24.0)
+            .strong()
+            .color(Color32::from_rgb(245, 246, 248)),
+    );
+    ui.add_space(4.0);
+
+    egui::Frame::new()
+        .fill(Color32::from_rgb(8, 11, 16))
+        .corner_radius(egui::CornerRadius::same(18))
+        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(36, 45, 58)))
+        .inner_margin(egui::Margin::same(12))
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new(report.path.display().to_string())
+                    .small()
+                    .monospace()
+                    .color(Color32::from_rgb(152, 161, 174)),
+            );
+        });
+
+    ui.add_space(10.0);
+    ui.horizontal_wrapped(|ui| {
+        pill(ui, "Resource Directory");
+        pill(ui, architecture);
+        if report.manifest_text.is_some() {
+            pill(ui, "Manifest Present");
+        }
+        if !report.version_info_rows.is_empty() {
+            pill(ui, "Version Info");
+        }
+    });
+
+    ui.add_space(14.0);
+    ui.horizontal_wrapped(|ui| {
+        inline_fact(ui, "Nodes", &report.resource_entries.len().to_string());
+        inline_fact(ui, "Version Rows", &report.version_info_rows.len().to_string());
+        inline_fact(
+            ui,
+            "Manifest",
+            if report.manifest_text.is_some() { "Present" } else { "Missing" },
+        );
+        inline_fact(ui, "Build Signals", &report.pe_metadata_rows.len().to_string());
+    });
+}
+
+fn render_resource_snapshot(ui: &mut Ui, report: &BinaryReport) {
+    ui.label(
+        RichText::new("Snapshot")
+            .strong()
+            .color(Color32::from_rgb(229, 233, 237)),
+    );
+    ui.add_space(8.0);
+
+    let compact = ui.available_width() < 760.0;
+    let top_row = [
+        (
+            "Resource Nodes",
+            report.resource_entries.len().to_string(),
+            Color32::from_rgb(90, 160, 255),
+        ),
+        (
+            "Version Rows",
+            report.version_info_rows.len().to_string(),
+            Color32::from_rgb(92, 184, 92),
+        ),
+    ];
+    let bottom_row = [
+        (
+            "Manifest",
+            if report.manifest_text.is_some() { "Present".to_string() } else { "Missing".to_string() },
+            Color32::from_rgb(210, 144, 72),
+        ),
+        (
+            "Build Signals",
+            report.pe_metadata_rows.len().to_string(),
+            Color32::from_rgb(198, 122, 255),
+        ),
+    ];
+
+    if compact {
+        for (title, value, accent) in top_row.into_iter().chain(bottom_row.into_iter()) {
+            metric_tile(ui, title, &value, accent);
+            ui.add_space(10.0);
+        }
+    } else {
+        ui.columns(2, |columns| {
+            metric_tile(&mut columns[0], top_row[0].0, &top_row[0].1, top_row[0].2);
+            metric_tile(&mut columns[1], top_row[1].0, &top_row[1].1, top_row[1].2);
+        });
+        ui.add_space(10.0);
+        ui.columns(2, |columns| {
+            metric_tile(&mut columns[0], bottom_row[0].0, &bottom_row[0].1, bottom_row[0].2);
+            metric_tile(&mut columns[1], bottom_row[1].0, &bottom_row[1].1, bottom_row[1].2);
+        });
+    }
+}
+
+fn render_resource_tree_panel(ui: &mut Ui, report: &BinaryReport) {
+    framed_panel(ui, |ui| {
+        ui.label(
+            RichText::new("Resource Tree")
+                .strong()
+                .color(Color32::from_rgb(229, 233, 237)),
+        );
+        ui.add_space(8.0);
+
+        if report.resource_entries.is_empty() {
+            ui.label(
+                RichText::new("No resource nodes were enumerated.")
+                    .color(Color32::from_rgb(140, 149, 160)),
+            );
+            return;
+        }
+
+        let visible_rows = report.resource_entries.len().clamp(4, 12) as f32;
+        let tree_height = 34.0 + visible_rows * 32.0;
+
+        tabular_surface(ui, "resource_tree_table", 680.0, |ui| {
+            let available = ui.available_width().max(680.0);
+            let kind_width = 92.0;
+            let size_width = 72.0;
+            let code_page_width = 92.0;
+            let name_width = (available - kind_width - size_width - code_page_width - 36.0).max(240.0);
+
+            resource_tree_header(ui, name_width, kind_width, size_width, code_page_width);
+            ui.add_space(8.0);
+
+            vertical_surface_scroll(ui, "resource_tree_rows", tree_height, |ui| {
+                for entry in &report.resource_entries {
+                    resource_tree_row(ui, entry, name_width, kind_width, size_width, code_page_width);
+                    ui.add_space(6.0);
+                }
+            });
+        });
+    });
+}
+
+fn render_resource_detail_stack(ui: &mut Ui, report: &BinaryReport) {
+    if !report.pe_metadata_rows.is_empty() {
+        framed_panel(ui, |ui| {
+            ui.label(
+                RichText::new("PE Build Signals")
+                    .strong()
+                    .color(Color32::from_rgb(229, 233, 237)),
+            );
+            ui.add_space(8.0);
+            render_kv_rows(ui, "pe_build_signals_rows", &report.pe_metadata_rows);
+        });
+
+        ui.add_space(12.0);
+    }
+
+    framed_panel(ui, |ui| {
+        ui.label(
+            RichText::new("Version Info")
+                .strong()
+                .color(Color32::from_rgb(229, 233, 237)),
+        );
+        ui.add_space(8.0);
+
+        if report.version_info_rows.is_empty() {
+            ui.label(
+                RichText::new("No version resource was extracted.")
+                    .color(Color32::from_rgb(140, 149, 160)),
+            );
+        } else {
+            vertical_surface_scroll(ui, "version_info_rows_scroll", 240.0, |ui| {
+                render_kv_rows(ui, "version_info_rows", &report.version_info_rows);
+            });
+        }
+    });
+
+    ui.add_space(12.0);
+
+    framed_panel(ui, |ui| {
+        ui.label(
+            RichText::new("Manifest")
+                .strong()
+                .color(Color32::from_rgb(229, 233, 237)),
+        );
+        ui.add_space(8.0);
+
+        if report.manifest_text.is_none() {
+            ui.label(
+                RichText::new("No application manifest was extracted.")
+                    .color(Color32::from_rgb(140, 149, 160)),
+            );
+            return;
+        }
+
+        if !report.manifest_rows.is_empty() {
+            render_kv_rows(ui, "manifest_signal_rows", &report.manifest_rows);
+            ui.add_space(10.0);
+        }
+
+        egui::Frame::new()
+            .fill(Color32::from_rgb(7, 10, 15))
+            .corner_radius(egui::CornerRadius::same(20))
+            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(35, 44, 56)))
+            .inner_margin(egui::Margin::same(12))
+            .show(ui, |ui| {
+                vertical_surface_scroll(ui, "manifest_text_scroll", 260.0, |ui| {
+                    if let Some(text) = &report.manifest_text {
+                        ui.label(
+                            RichText::new(text)
+                                .monospace()
+                                .color(Color32::from_rgb(194, 201, 211)),
+                        );
+                    }
+                });
+            });
+    });
+}
+
+fn resource_tree_header(ui: &mut Ui, name_width: f32, kind_width: f32, size_width: f32, code_page_width: f32) {
+    ui.horizontal(|ui| {
+        ui.add_sized(
+            [name_width, 18.0],
+            egui::Label::new(RichText::new("Name").small().color(Color32::from_rgb(145, 154, 166))),
+        );
+        ui.add_sized(
+            [kind_width, 18.0],
+            egui::Label::new(RichText::new("Kind").small().color(Color32::from_rgb(145, 154, 166))),
+        );
+        ui.add_sized(
+            [size_width, 18.0],
+            egui::Label::new(RichText::new("Size").small().color(Color32::from_rgb(145, 154, 166))),
+        );
+        ui.add_sized(
+            [code_page_width, 18.0],
+            egui::Label::new(RichText::new("CodePage").small().color(Color32::from_rgb(145, 154, 166))),
+        );
+    });
+}
+
+fn resource_tree_row(
+    ui: &mut Ui,
+    entry: &crate::analyzer::ResourceEntry,
+    name_width: f32,
+    kind_width: f32,
+    size_width: f32,
+    code_page_width: f32,
+) {
+    egui::Frame::new()
+        .fill(Color32::from_rgb(10, 14, 19))
+        .corner_radius(egui::CornerRadius::same(16))
+        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(27, 35, 45)))
+        .inner_margin(egui::Margin::symmetric(10, 8))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.allocate_ui_with_layout(
+                    egui::vec2(name_width, 22.0),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        ui.add_space((entry.depth as f32 * 14.0).min(84.0));
+                        let marker = if entry.kind == "Directory" { ">" } else { "-" };
+                        ui.label(
+                            RichText::new(format!("{marker} {}", entry.name))
+                                .monospace()
+                                .color(Color32::from_rgb(210, 216, 224)),
+                        )
+                        .on_hover_text(&entry.path);
+                    },
+                );
+                ui.add_sized(
+                    [kind_width, 22.0],
+                    egui::Label::new(
+                        RichText::new(&entry.kind)
+                            .small()
+                            .color(Color32::from_rgb(174, 183, 194)),
+                    ),
+                );
+                ui.add_sized(
+                    [size_width, 22.0],
+                    egui::Label::new(
+                        RichText::new(if entry.size == 0 {
+                            "-".to_string()
+                        } else {
+                            entry.size.to_string()
+                        })
+                        .monospace()
+                        .color(Color32::from_rgb(192, 198, 207)),
+                    ),
+                );
+                ui.add_sized(
+                    [code_page_width, 22.0],
+                    egui::Label::new(
+                        RichText::new(if entry.code_page == 0 {
+                            "-".to_string()
+                        } else {
+                            format!("0x{:X}", entry.code_page)
+                        })
+                        .monospace()
+                        .color(Color32::from_rgb(192, 198, 207)),
+                    ),
+                );
+            });
+        });
+}
+
+fn render_metric_strip(ui: &mut Ui, metrics: &[(&str, String, Color32)]) {
+    if ui.available_width() >= 760.0 && metrics.len() >= 4 {
+        ui.columns(2, |columns| {
+            metric_tile(&mut columns[0], metrics[0].0, &metrics[0].1, metrics[0].2);
+            metric_tile(&mut columns[1], metrics[1].0, &metrics[1].1, metrics[1].2);
+        });
+        ui.add_space(10.0);
+        ui.columns(2, |columns| {
+            metric_tile(&mut columns[0], metrics[2].0, &metrics[2].1, metrics[2].2);
+            metric_tile(&mut columns[1], metrics[3].0, &metrics[3].1, metrics[3].2);
+        });
+    } else {
+        for (index, (title, value, accent)) in metrics.iter().enumerate() {
+            metric_tile(ui, title, value, *accent);
+            if index + 1 < metrics.len() {
+                ui.add_space(10.0);
+            }
+        }
+    }
+}
+
+fn section_surface(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) {
+    egui::Frame::new()
+        .fill(Color32::from_rgb(7, 10, 15))
+        .corner_radius(egui::CornerRadius::same(20))
+        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(35, 44, 56)))
+        .inner_margin(egui::Margin::same(12))
+        .show(ui, add_contents);
+}
+
+fn tabular_surface(
+    ui: &mut Ui,
+    id_source: impl std::hash::Hash,
+    min_width: f32,
+    add_contents: impl FnOnce(&mut Ui),
+) {
+    section_surface(ui, |ui| {
+        egui::ScrollArea::horizontal()
+            .id_salt(ui.id().with(id_source).with("tabular_surface"))
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                ui.set_min_width(min_width);
+                add_contents(ui);
+            });
+    });
+}
+
+fn vertical_surface_scroll(
+    ui: &mut Ui,
+    id_source: impl std::hash::Hash,
+    max_height: f32,
+    add_contents: impl FnOnce(&mut Ui),
+) {
+    egui::ScrollArea::vertical()
+        .id_salt(ui.id().with(id_source).with("vertical_surface_scroll"))
+        .max_height(max_height)
+        .auto_shrink([false, false])
+        .show(ui, add_contents);
+}
+
 fn render_sections(ui: &mut Ui, report: &BinaryReport) {
     render_panel_title(ui, "Sections", "PE section layout, permissions, and entropy");
 
+    let executable_sections = report
+        .sections
+        .iter()
+        .filter(|section| section.characteristics.contains("EXECUTE"))
+        .count();
+    let writable_sections = report
+        .sections
+        .iter()
+        .filter(|section| section.characteristics.contains("WRITE"))
+        .count();
+    let high_entropy_sections = report.sections.iter().filter(|section| section.entropy >= 7.0).count();
+
+    render_metric_strip(
+        ui,
+        &[
+            ("Count", report.sections.len().to_string(), Color32::from_rgb(90, 160, 255)),
+            ("Executable", executable_sections.to_string(), Color32::from_rgb(92, 184, 92)),
+            ("Writable", writable_sections.to_string(), Color32::from_rgb(210, 144, 72)),
+            ("High Entropy", high_entropy_sections.to_string(), Color32::from_rgb(198, 122, 255)),
+        ],
+    );
+    ui.add_space(12.0);
+
     framed_panel(ui, |ui| {
-        TableBuilder::new(ui)
-            .striped(true)
-            .column(Column::initial(120.0))
-            .column(Column::initial(100.0))
-            .column(Column::initial(100.0))
-            .column(Column::initial(100.0))
-            .column(Column::initial(100.0))
-            .column(Column::remainder())
-            .column(Column::initial(80.0))
-            .header(24.0, |mut header| {
-                for title in ["Name", "VA", "VSZ", "Raw", "RSZ", "Characteristics", "Entropy"] {
-                    header.col(|ui| {
-                        ui.strong(title);
-                    });
-                }
-            })
-            .body(|mut body| {
-                for section in &report.sections {
-                    body.row(22.0, |mut row| {
-                        row.col(|ui| {
-                            ui.monospace(&section.name);
+        tabular_surface(ui, "sections_table", 860.0, |ui| {
+            TableBuilder::new(ui)
+                .striped(true)
+                .column(Column::initial(120.0))
+                .column(Column::initial(100.0))
+                .column(Column::initial(100.0))
+                .column(Column::initial(100.0))
+                .column(Column::initial(100.0))
+                .column(Column::remainder())
+                .column(Column::initial(80.0))
+                .header(24.0, |mut header| {
+                    for title in ["Name", "VA", "VSZ", "Raw", "RSZ", "Characteristics", "Entropy"] {
+                        header.col(|ui| {
+                            ui.strong(title);
                         });
-                        row.col(|ui| {
-                            ui.monospace(format!("0x{:X}", section.virtual_address));
+                    }
+                })
+                .body(|mut body| {
+                    for section in &report.sections {
+                        body.row(22.0, |mut row| {
+                            row.col(|ui| {
+                                ui.monospace(&section.name);
+                            });
+                            row.col(|ui| {
+                                ui.monospace(format!("0x{:X}", section.virtual_address));
+                            });
+                            row.col(|ui| {
+                                ui.monospace(format!("0x{:X}", section.virtual_size));
+                            });
+                            row.col(|ui| {
+                                ui.monospace(format!("0x{:X}", section.raw_address));
+                            });
+                            row.col(|ui| {
+                                ui.monospace(format!("0x{:X}", section.raw_size));
+                            });
+                            row.col(|ui| {
+                                ui.label(&section.characteristics);
+                            });
+                            row.col(|ui| {
+                                ui.label(format!("{:.2}", section.entropy));
+                            });
                         });
-                        row.col(|ui| {
-                            ui.monospace(format!("0x{:X}", section.virtual_size));
-                        });
-                        row.col(|ui| {
-                            ui.monospace(format!("0x{:X}", section.raw_address));
-                        });
-                        row.col(|ui| {
-                            ui.monospace(format!("0x{:X}", section.raw_size));
-                        });
-                        row.col(|ui| {
-                            ui.label(&section.characteristics);
-                        });
-                        row.col(|ui| {
-                            ui.label(format!("{:.2}", section.entropy));
-                        });
-                    });
-                }
-            });
+                    }
+                });
+        });
     });
 }
 
 fn render_imports(ui: &mut Ui, report: &BinaryReport) {
     render_panel_title(ui, "Imports", "Grouped imported DLLs and resolved function names");
 
+    let import_count = report.imports.iter().map(|dll| dll.functions.len()).sum::<usize>();
+    let ordinal_count = report
+        .imports
+        .iter()
+        .flat_map(|dll| dll.functions.iter())
+        .filter(|func| func.ordinal != 0)
+        .count();
+
+    render_metric_strip(
+        ui,
+        &[
+            ("DLLs", report.imports.len().to_string(), Color32::from_rgb(90, 160, 255)),
+            ("APIs", import_count.to_string(), Color32::from_rgb(92, 184, 92)),
+            ("Ordinals", ordinal_count.to_string(), Color32::from_rgb(210, 144, 72)),
+            (
+                "Empty Groups",
+                report.imports.iter().filter(|dll| dll.functions.is_empty()).count().to_string(),
+                Color32::from_rgb(198, 122, 255),
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
     framed_panel(ui, |ui| {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for dll in &report.imports {
-                egui::CollapsingHeader::new(format!("{} ({})", dll.name, dll.functions.len()))
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        if dll.functions.is_empty() {
-                            ui.label(RichText::new("Container or library reference only").small().color(Color32::GRAY));
-                        }
-                        for function in &dll.functions {
-                            ui.monospace(format!("{}    ordinal: {}", function.name, function.ordinal));
-                        }
-                    });
-            }
+        section_surface(ui, |ui| {
+            vertical_surface_scroll(ui, "imports_list_scroll", 560.0, |ui| {
+                for dll in &report.imports {
+                    egui::CollapsingHeader::new(format!("{} ({})", dll.name, dll.functions.len()))
+                        .default_open(dll.functions.len() <= 12)
+                        .show(ui, |ui| {
+                            if dll.functions.is_empty() {
+                                ui.label(RichText::new("Container or library reference only").small().color(Color32::GRAY));
+                            }
+                            for function in &dll.functions {
+                                egui::Frame::new()
+                                    .fill(Color32::from_rgb(9, 13, 18))
+                                    .corner_radius(egui::CornerRadius::same(14))
+                                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(28, 36, 46)))
+                                    .inner_margin(egui::Margin::symmetric(10, 6))
+                                    .show(ui, |ui| {
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.monospace(&function.name);
+                                            ui.label(
+                                                RichText::new(format!("ordinal {}", function.ordinal))
+                                                    .small()
+                                                    .color(Color32::from_rgb(145, 154, 166)),
+                                            );
+                                        });
+                                    });
+                                ui.add_space(6.0);
+                            }
+                        });
+                    ui.add_space(6.0);
+                }
+            });
         });
     });
 }
@@ -1079,34 +1718,75 @@ fn render_imports(ui: &mut Ui, report: &BinaryReport) {
 fn render_exports(ui: &mut Ui, report: &BinaryReport) {
     render_panel_title(ui, "Exports", "Exported names with offsets and RVAs");
 
+    render_metric_strip(
+        ui,
+        &[
+            ("Exports", report.exports.len().to_string(), Color32::from_rgb(90, 160, 255)),
+            (
+                "Named",
+                report
+                    .exports
+                    .iter()
+                    .filter(|export| export.name != "<ordinal>")
+                    .count()
+                    .to_string(),
+                Color32::from_rgb(92, 184, 92),
+            ),
+            (
+                "Ordinal",
+                report
+                    .exports
+                    .iter()
+                    .filter(|export| export.name == "<ordinal>")
+                    .count()
+                    .to_string(),
+                Color32::from_rgb(210, 144, 72),
+            ),
+            (
+                "Last RVA",
+                report
+                    .exports
+                    .iter()
+                    .map(|export| export.rva)
+                    .max()
+                    .map(|value| format!("0x{value:X}"))
+                    .unwrap_or_else(|| "-".to_string()),
+                Color32::from_rgb(198, 122, 255),
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
     framed_panel(ui, |ui| {
-        TableBuilder::new(ui)
-            .striped(true)
-            .column(Column::remainder())
-            .column(Column::initial(120.0))
-            .column(Column::initial(120.0))
-            .header(24.0, |mut header| {
-                for title in ["Name", "Offset", "RVA"] {
-                    header.col(|ui| {
-                        ui.strong(title);
-                    });
-                }
-            })
-            .body(|mut body| {
-                for export in &report.exports {
-                    body.row(22.0, |mut row| {
-                        row.col(|ui| {
-                            ui.monospace(&export.name);
+        tabular_surface(ui, "exports_table", 520.0, |ui| {
+            TableBuilder::new(ui)
+                .striped(true)
+                .column(Column::remainder())
+                .column(Column::initial(120.0))
+                .column(Column::initial(120.0))
+                .header(24.0, |mut header| {
+                    for title in ["Name", "Offset", "RVA"] {
+                        header.col(|ui| {
+                            ui.strong(title);
                         });
-                        row.col(|ui| {
-                            ui.monospace(format!("0x{:X}", export.offset));
+                    }
+                })
+                .body(|mut body| {
+                    for export in &report.exports {
+                        body.row(22.0, |mut row| {
+                            row.col(|ui| {
+                                ui.monospace(&export.name);
+                            });
+                            row.col(|ui| {
+                                ui.monospace(format!("0x{:X}", export.offset));
+                            });
+                            row.col(|ui| {
+                                ui.monospace(format!("0x{:X}", export.rva));
+                            });
                         });
-                        row.col(|ui| {
-                            ui.monospace(format!("0x{:X}", export.rva));
-                        });
-                    });
-                }
-            });
+                    }
+                });
+        });
     });
 }
 
@@ -1156,6 +1836,30 @@ fn render_strings(
 
     let visible_count = filtered.len().min(100);
 
+    render_metric_strip(
+        ui,
+        &[
+            ("Total", report.strings.len().to_string(), Color32::from_rgb(90, 160, 255)),
+            ("Visible", filtered.len().to_string(), Color32::from_rgb(92, 184, 92)),
+            (
+                "ASCII",
+                report.strings.iter().filter(|entry| entry.kind == "ASCII").count().to_string(),
+                Color32::from_rgb(210, 144, 72),
+            ),
+            (
+                "UTF-16LE",
+                report
+                    .strings
+                    .iter()
+                    .filter(|entry| entry.kind == "UTF-16LE")
+                    .count()
+                    .to_string(),
+                Color32::from_rgb(198, 122, 255),
+            ),
+        ],
+    );
+    ui.add_space(10.0);
+
     ui.horizontal_wrapped(|ui| {
         ui.label(
             RichText::new(format!("showing {} of {} visible / {} total", visible_count, filtered.len(), report.strings.len()))
@@ -1174,39 +1878,41 @@ fn render_strings(
     ui.add_space(8.0);
 
     framed_panel(ui, |ui| {
-        TableBuilder::new(ui)
-            .striped(true)
-            .column(Column::initial(90.0))
-            .column(Column::initial(120.0))
-            .column(Column::remainder())
-            .header(24.0, |mut header| {
-                for title in ["Kind", "Offset", "Value"] {
-                    header.col(|ui| {
-                        ui.strong(title);
-                    });
-                }
-            })
-            .body(|mut body| {
-                for string in filtered.into_iter().take(100) {
-                    body.row(22.0, |mut row| {
-                        row.col(|ui| {
-                            ui.label(
-                                RichText::new(string.kind).color(match string.kind {
-                                    "ASCII" => Color32::from_rgb(110, 174, 255),
-                                    "UTF-16LE" => Color32::from_rgb(124, 208, 156),
-                                    _ => Color32::LIGHT_GRAY,
-                                }),
-                            );
+        tabular_surface(ui, "strings_table", 640.0, |ui| {
+            TableBuilder::new(ui)
+                .striped(true)
+                .column(Column::initial(90.0))
+                .column(Column::initial(120.0))
+                .column(Column::remainder())
+                .header(24.0, |mut header| {
+                    for title in ["Kind", "Offset", "Value"] {
+                        header.col(|ui| {
+                            ui.strong(title);
                         });
-                        row.col(|ui| {
-                            ui.monospace(format!("0x{:X}", string.offset));
+                    }
+                })
+                .body(|mut body| {
+                    for string in filtered.into_iter().take(100) {
+                        body.row(22.0, |mut row| {
+                            row.col(|ui| {
+                                ui.label(
+                                    RichText::new(string.kind).color(match string.kind {
+                                        "ASCII" => Color32::from_rgb(110, 174, 255),
+                                        "UTF-16LE" => Color32::from_rgb(124, 208, 156),
+                                        _ => Color32::LIGHT_GRAY,
+                                    }),
+                                );
+                            });
+                            row.col(|ui| {
+                                ui.monospace(format!("0x{:X}", string.offset));
+                            });
+                            row.col(|ui| {
+                                ui.label(&string.value);
+                            });
                         });
-                        row.col(|ui| {
-                            ui.label(&string.value);
-                        });
-                    });
-                }
-            });
+                    }
+                });
+        });
     });
 }
 
@@ -1217,38 +1923,62 @@ fn render_disassembly(ui: &mut Ui, report: &BinaryReport) {
         "Entry-point focused preview from .text or the containing section",
     );
 
+    let first_address = report
+        .disassembly
+        .first()
+        .map(|insn| format!("0x{:X}", insn.address))
+        .unwrap_or_else(|| "-".to_string());
+    let last_address = report
+        .disassembly
+        .last()
+        .map(|insn| format!("0x{:X}", insn.address))
+        .unwrap_or_else(|| "-".to_string());
+
+    render_metric_strip(
+        ui,
+        &[
+            ("Instructions", report.disassembly.len().to_string(), Color32::from_rgb(90, 160, 255)),
+            ("Entry", format!("0x{:X}", report.entry_point), Color32::from_rgb(92, 184, 92)),
+            ("First", first_address, Color32::from_rgb(210, 144, 72)),
+            ("Last", last_address, Color32::from_rgb(198, 122, 255)),
+        ],
+    );
+    ui.add_space(12.0);
+
     framed_panel(ui, |ui| {
-        TableBuilder::new(ui)
-            .striped(true)
-            .column(Column::initial(140.0))
-            .column(Column::initial(220.0))
-            .column(Column::initial(110.0))
-            .column(Column::remainder())
-            .header(24.0, |mut header| {
-                for title in ["Address", "Bytes", "Mnemonic", "Operands"] {
-                    header.col(|ui| {
-                        ui.strong(title);
-                    });
-                }
-            })
-            .body(|mut body| {
-                for insn in &report.disassembly {
-                    body.row(22.0, |mut row| {
-                        row.col(|ui| {
-                            ui.monospace(format!("0x{:X}", insn.address));
+        tabular_surface(ui, "disassembly_table", 780.0, |ui| {
+            TableBuilder::new(ui)
+                .striped(true)
+                .column(Column::initial(140.0))
+                .column(Column::initial(220.0))
+                .column(Column::initial(110.0))
+                .column(Column::remainder())
+                .header(24.0, |mut header| {
+                    for title in ["Address", "Bytes", "Mnemonic", "Operands"] {
+                        header.col(|ui| {
+                            ui.strong(title);
                         });
-                        row.col(|ui| {
-                            ui.monospace(&insn.bytes);
+                    }
+                })
+                .body(|mut body| {
+                    for insn in &report.disassembly {
+                        body.row(22.0, |mut row| {
+                            row.col(|ui| {
+                                ui.monospace(format!("0x{:X}", insn.address));
+                            });
+                            row.col(|ui| {
+                                ui.monospace(&insn.bytes);
+                            });
+                            row.col(|ui| {
+                                ui.monospace(&insn.mnemonic);
+                            });
+                            row.col(|ui| {
+                                ui.monospace(&insn.operand);
+                            });
                         });
-                        row.col(|ui| {
-                            ui.monospace(&insn.mnemonic);
-                        });
-                        row.col(|ui| {
-                            ui.monospace(&insn.operand);
-                        });
-                    });
-                }
-            });
+                    }
+                });
+        });
     });
 }
 
@@ -1288,6 +2018,43 @@ fn raw_offset_for_entry(report: &BinaryReport) -> usize {
         .unwrap_or_default()
 }
 
+fn raw_offset_from_rva(report: &BinaryReport, rva: u64) -> Option<usize> {
+    report.sections.iter().find_map(|section| {
+        let start = section.virtual_address as u64;
+        let span = section.virtual_size.max(section.raw_size) as u64;
+        let end = start.saturating_add(span);
+        if rva >= start && rva < end {
+            Some(section.raw_address as usize + (rva - start) as usize)
+        } else {
+            None
+        }
+    })
+}
+
+fn rva_from_raw_offset(report: &BinaryReport, raw_offset: usize) -> Option<u64> {
+    report.sections.iter().find_map(|section| {
+        let start = section.raw_address as usize;
+        let end = start.saturating_add(section.raw_size as usize);
+        if raw_offset >= start && raw_offset < end {
+            Some(section.virtual_address as u64 + (raw_offset - start) as u64)
+        } else {
+            None
+        }
+    })
+}
+
+fn section_name_for_raw_offset(report: &BinaryReport, raw_offset: usize) -> Option<&str> {
+    report.sections.iter().find_map(|section| {
+        let start = section.raw_address as usize;
+        let end = start.saturating_add(section.raw_size as usize);
+        if raw_offset >= start && raw_offset < end {
+            Some(section.name.as_str())
+        } else {
+            None
+        }
+    })
+}
+
 fn format_hex_bytes(row: &[u8], row_size: usize) -> String {
     let mut output = String::new();
 
@@ -1324,6 +2091,28 @@ fn format_ascii_preview(row: &[u8]) -> String {
 fn render_archive(ui: &mut Ui, report: &BinaryReport) {
     render_panel_title(ui, "Archive", "Container members for ZIP-like and package formats");
 
+    let total_archive_size = report.archive_entries.iter().map(|entry| entry.size).sum::<u64>();
+    render_metric_strip(
+        ui,
+        &[
+            ("Entries", report.archive_entries.len().to_string(), Color32::from_rgb(90, 160, 255)),
+            ("Total Size", total_archive_size.to_string(), Color32::from_rgb(92, 184, 92)),
+            (
+                "Kinds",
+                report
+                    .archive_entries
+                    .iter()
+                    .map(|entry| entry.kind.as_str())
+                    .collect::<std::collections::HashSet<_>>()
+                    .len()
+                    .to_string(),
+                Color32::from_rgb(210, 144, 72),
+            ),
+            ("Format", report.format_name.clone(), Color32::from_rgb(198, 122, 255)),
+        ],
+    );
+    ui.add_space(12.0);
+
     framed_panel(ui, |ui| {
         if report.archive_entries.is_empty() {
             ui.label(
@@ -1333,46 +2122,68 @@ fn render_archive(ui: &mut Ui, report: &BinaryReport) {
             return;
         }
 
-        TableBuilder::new(ui)
-            .striped(true)
-            .column(Column::remainder())
-            .column(Column::initial(120.0))
-            .column(Column::initial(120.0))
-            .header(24.0, |mut header| {
-                for title in ["Name", "Kind", "Size"] {
-                    header.col(|ui| {
-                        ui.strong(title);
-                    });
-                }
-            })
-            .body(|mut body| {
-                for entry in &report.archive_entries {
-                    body.row(22.0, |mut row| {
-                        row.col(|ui| {
-                            ui.monospace(&entry.name);
+        tabular_surface(ui, "archive_table", 560.0, |ui| {
+            TableBuilder::new(ui)
+                .striped(true)
+                .column(Column::remainder())
+                .column(Column::initial(120.0))
+                .column(Column::initial(120.0))
+                .header(24.0, |mut header| {
+                    for title in ["Name", "Kind", "Size"] {
+                        header.col(|ui| {
+                            ui.strong(title);
                         });
-                        row.col(|ui| {
-                            ui.label(&entry.kind);
+                    }
+                })
+                .body(|mut body| {
+                    for entry in &report.archive_entries {
+                        body.row(22.0, |mut row| {
+                            row.col(|ui| {
+                                ui.monospace(&entry.name);
+                            });
+                            row.col(|ui| {
+                                ui.label(&entry.kind);
+                            });
+                            row.col(|ui| {
+                                ui.monospace(format!("{}", entry.size));
+                            });
                         });
-                        row.col(|ui| {
-                            ui.monospace(format!("{}", entry.size));
-                        });
-                    });
-                }
-            });
+                    }
+                });
+        });
     });
 }
 
 fn render_headers(ui: &mut Ui, report: &BinaryReport) {
     render_panel_title(ui, "Headers", "DOS, file, and optional header detail");
 
-    if ui.available_width() >= 1100.0 {
+    render_metric_strip(
+        ui,
+        &[
+            ("DOS Rows", report.dos_header.len().to_string(), Color32::from_rgb(90, 160, 255)),
+            ("File Rows", report.file_header.len().to_string(), Color32::from_rgb(92, 184, 92)),
+            ("Optional Rows", report.optional_header.len().to_string(), Color32::from_rgb(210, 144, 72)),
+            ("Rich Rows", report.rich_headers.len().to_string(), Color32::from_rgb(198, 122, 255)),
+        ],
+    );
+    ui.add_space(12.0);
+
+    if ui.available_width() >= 1500.0 {
         framed_panel(ui, |ui| {
             ui.columns(3, |columns| {
                 render_kv_group(&mut columns[0], "DOS Header", &report.dos_header);
                 render_kv_group(&mut columns[1], "File Header", &report.file_header);
                 render_kv_group(&mut columns[2], "Optional Header", &report.optional_header);
             });
+        });
+    } else if ui.available_width() >= 1060.0 {
+        framed_panel(ui, |ui| {
+            ui.columns(2, |columns| {
+                render_kv_group(&mut columns[0], "DOS Header", &report.dos_header);
+                render_kv_group(&mut columns[1], "File Header", &report.file_header);
+            });
+            ui.add_space(12.0);
+            render_kv_group(ui, "Optional Header", &report.optional_header);
         });
     } else {
         framed_panel(ui, |ui| {
@@ -1392,6 +2203,21 @@ fn render_headers(ui: &mut Ui, report: &BinaryReport) {
 
 fn render_protection(ui: &mut Ui, report: &BinaryReport) {
     render_panel_title(ui, "Protection", "Mitigations, anti-debug indicators, and suspicious API heuristics");
+
+    let enabled_mitigations = [
+        report.protections.aslr,
+        report.protections.dep_nx,
+        report.protections.seh_enabled,
+        report.protections.no_seh,
+    ]
+    .into_iter()
+    .filter(|value| *value)
+    .count();
+    let high_findings = report
+        .protection_findings
+        .iter()
+        .filter(|finding| finding.severity == "high")
+        .count();
 
     let mitigations = [
         KeyValueRow {
@@ -1416,7 +2242,18 @@ fn render_protection(ui: &mut Ui, report: &BinaryReport) {
         },
     ];
 
-    if ui.available_width() >= 1200.0 {
+    render_metric_strip(
+        ui,
+        &[
+            ("Mitigations", enabled_mitigations.to_string(), Color32::from_rgb(90, 160, 255)),
+            ("Findings", report.protection_findings.len().to_string(), Color32::from_rgb(92, 184, 92)),
+            ("High", high_findings.to_string(), Color32::from_rgb(210, 144, 72)),
+            ("TLS", report.protections.tls_callbacks.to_string(), Color32::from_rgb(198, 122, 255)),
+        ],
+    );
+    ui.add_space(12.0);
+
+    if ui.available_width() >= 1360.0 {
         ui.columns(2, |columns| {
             framed_panel(&mut columns[0], |ui| {
                 render_kv_group(ui, "Mitigations", &mitigations);
@@ -1444,7 +2281,18 @@ fn render_xor(ui: &mut Ui, report: &BinaryReport) {
         "Single-byte candidates, repeating multi-byte patterns, and common-key previews",
     );
 
-    if ui.available_width() >= 1200.0 {
+    render_metric_strip(
+        ui,
+        &[
+            ("Single-byte", report.xor_candidates.len().to_string(), Color32::from_rgb(90, 160, 255)),
+            ("Common Keys", report.xor_common_key_hits.len().to_string(), Color32::from_rgb(92, 184, 92)),
+            ("Patterns", report.xor_patterns.len().to_string(), Color32::from_rgb(210, 144, 72)),
+            ("Strings", report.strings.len().to_string(), Color32::from_rgb(198, 122, 255)),
+        ],
+    );
+    ui.add_space(12.0);
+
+    if ui.available_width() >= 1360.0 {
         ui.columns(2, |columns| {
             framed_panel(&mut columns[0], |ui| {
                 render_xor_candidates_panel(
@@ -1495,33 +2343,35 @@ fn render_xor(ui: &mut Ui, report: &BinaryReport) {
         if report.xor_patterns.is_empty() {
             ui.label("No repeating 2/4/8/16-byte patterns crossed the reporting threshold.");
         } else {
-            TableBuilder::new(ui)
-                .striped(true)
-                .column(Column::initial(80.0))
-                .column(Column::initial(80.0))
-                .column(Column::remainder())
-                .header(24.0, |mut header| {
-                    for title in ["Len", "Count", "Pattern"] {
-                        header.col(|ui| {
-                            ui.strong(title);
-                        });
-                    }
-                })
-                .body(|mut body| {
-                    for pattern in &report.xor_patterns {
-                        body.row(22.0, |mut row| {
-                            row.col(|ui| {
-                                ui.monospace(pattern.length.to_string());
+            tabular_surface(ui, "xor_patterns_table", 360.0, |ui| {
+                TableBuilder::new(ui)
+                    .striped(true)
+                    .column(Column::initial(80.0))
+                    .column(Column::initial(80.0))
+                    .column(Column::remainder())
+                    .header(24.0, |mut header| {
+                        for title in ["Len", "Count", "Pattern"] {
+                            header.col(|ui| {
+                                ui.strong(title);
                             });
-                            row.col(|ui| {
-                                ui.monospace(pattern.count.to_string());
+                        }
+                    })
+                    .body(|mut body| {
+                        for pattern in &report.xor_patterns {
+                            body.row(22.0, |mut row| {
+                                row.col(|ui| {
+                                    ui.monospace(pattern.length.to_string());
+                                });
+                                row.col(|ui| {
+                                    ui.monospace(pattern.count.to_string());
+                                });
+                                row.col(|ui| {
+                                    ui.monospace(&pattern.pattern);
+                                });
                             });
-                            row.col(|ui| {
-                                ui.monospace(&pattern.pattern);
-                            });
-                        });
-                    }
-                });
+                        }
+                    });
+            });
         }
     });
 }
@@ -1533,15 +2383,39 @@ fn render_kv_group(ui: &mut Ui, title: &str, rows: &[KeyValueRow]) {
         .stroke(egui::Stroke::new(1.0, Color32::from_rgb(42, 52, 66)))
         .inner_margin(egui::Margin::same(14))
         .show(ui, |ui| {
-        ui.strong(title);
-        ui.add_space(6.0);
-        for row in rows {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new(&row.key).monospace().color(Color32::LIGHT_BLUE));
-                ui.label(&row.value);
-            });
-        }
-    });
+            ui.label(
+                RichText::new(title)
+                    .strong()
+                    .color(Color32::from_rgb(229, 233, 237)),
+            );
+            ui.add_space(8.0);
+            render_kv_rows(ui, title, rows);
+        });
+}
+
+fn render_kv_rows(ui: &mut Ui, id_source: impl std::hash::Hash, rows: &[KeyValueRow]) {
+    egui::Grid::new(ui.id().with(id_source).with("kv_rows"))
+        .num_columns(2)
+        .min_col_width(if ui.available_width() >= 540.0 { 120.0 } else { 88.0 })
+        .spacing([18.0, 10.0])
+        .show(ui, |ui| {
+            for row in rows {
+                ui.label(
+                    RichText::new(&row.key)
+                        .monospace()
+                        .color(Color32::from_rgb(137, 181, 255)),
+                );
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(&row.value)
+                            .monospace()
+                            .color(Color32::from_rgb(202, 208, 216)),
+                    )
+                    .wrap(),
+                );
+                ui.end_row();
+            }
+        });
 }
 
 fn render_findings(ui: &mut Ui, findings: &[crate::analyzer::ProtectionFinding]) {
@@ -1550,21 +2424,60 @@ fn render_findings(ui: &mut Ui, findings: &[crate::analyzer::ProtectionFinding])
             .strong()
             .color(Color32::from_rgb(229, 233, 237)),
     );
-    ui.add_space(6.0);
-    for finding in findings {
+    ui.add_space(8.0);
+    if findings.is_empty() {
         ui.label(
-            RichText::new(format!(
-                "[{}] {}: {}",
-                finding.severity.to_uppercase(),
-                finding.title,
-                finding.detail
-            ))
-            .color(match finding.severity {
+            RichText::new("No suspicious findings were emitted for this file.")
+                .color(Color32::from_rgb(140, 149, 160)),
+        );
+        return;
+    }
+
+    vertical_surface_scroll(ui, "protection_findings_scroll", 320.0, |ui| {
+        for finding in findings {
+            let accent = match finding.severity {
                 "high" => Color32::from_rgb(235, 104, 104),
                 "medium" => Color32::from_rgb(233, 184, 97),
                 _ => Color32::from_rgb(150, 180, 150),
-            }),
-        );
+            };
+
+            egui::Frame::new()
+                .fill(Color32::from_rgb(10, 14, 19))
+                .corner_radius(egui::CornerRadius::same(16))
+                .stroke(egui::Stroke::new(1.0, accent.gamma_multiply(0.55)))
+                .inner_margin(egui::Margin::same(12))
+                .show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(
+                            RichText::new(finding.severity.to_uppercase())
+                                .small()
+                                .strong()
+                                .color(accent),
+                        );
+                        ui.label(
+                            RichText::new(&finding.title)
+                                .strong()
+                                .color(Color32::from_rgb(230, 234, 239)),
+                        );
+                    });
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(&finding.detail)
+                            .color(Color32::from_rgb(176, 184, 194)),
+                    );
+                });
+            ui.add_space(8.0);
+        }
+    });
+}
+
+fn xor_readability_color(readability: f32) -> Color32 {
+    if readability >= 70.0 {
+        Color32::from_rgb(124, 208, 156)
+    } else if readability >= 45.0 {
+        Color32::from_rgb(233, 184, 97)
+    } else {
+        Color32::from_rgb(145, 154, 166)
     }
 }
 
@@ -1581,18 +2494,45 @@ fn render_xor_candidates_panel(
     );
     ui.add_space(8.0);
     if candidates.is_empty() {
-        ui.label(empty_message);
+        ui.label(RichText::new(empty_message).color(Color32::from_rgb(140, 149, 160)));
     } else {
-        for candidate in candidates {
-            ui.label(
-                RichText::new(format!(
-                    "{} | key={} | {:.1}% | {}",
-                    candidate.source, candidate.key, candidate.readability, candidate.preview
-                ))
-                .monospace()
-                .color(Color32::from_rgb(186, 194, 204)),
-            );
-        }
+        vertical_surface_scroll(ui, title, 320.0, |ui| {
+            for candidate in candidates {
+                let accent = xor_readability_color(candidate.readability);
+
+                egui::Frame::new()
+                    .fill(Color32::from_rgb(10, 14, 19))
+                    .corner_radius(egui::CornerRadius::same(16))
+                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(29, 38, 49)))
+                    .inner_margin(egui::Margin::same(12))
+                    .show(ui, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(
+                                RichText::new(&candidate.source)
+                                    .small()
+                                    .color(Color32::from_rgb(145, 154, 166)),
+                            );
+                            ui.label(
+                                RichText::new(format!("key={}", candidate.key))
+                                    .monospace()
+                                    .color(Color32::from_rgb(210, 216, 224)),
+                            );
+                            ui.label(
+                                RichText::new(format!("{:.1}%", candidate.readability))
+                                    .monospace()
+                                    .color(accent),
+                            );
+                        });
+                        ui.add_space(4.0);
+                        ui.label(
+                            RichText::new(&candidate.preview)
+                                .monospace()
+                                .color(Color32::from_rgb(186, 194, 204)),
+                        );
+                    });
+                ui.add_space(8.0);
+            }
+        });
     }
 }
 

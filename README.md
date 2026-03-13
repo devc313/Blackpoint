@@ -44,6 +44,10 @@ It is designed as a native desktop workflow with custom window chrome, an OLED-i
 - DOS header
 - File header
 - Optional header
+- Resource tree enumeration
+- Version information extraction
+- Application manifest extraction with execution-level and awareness hints
+- PE build signals such as overlay detection, debug directories, PDB path, CLR, bound import, delay import, and certificate-table presence
 - Section table with entropy and permission flags
 - Imports grouped by DLL with ordinal support
 - Exports with RVA and offset information
@@ -54,7 +58,7 @@ It is designed as a native desktop workflow with custom window chrome, an OLED-i
 - ASCII and UTF-16LE string extraction
 - Search and filtering in the strings view
 - Entry-point disassembly with Capstone
-- Raw hex viewer with offset jump and entry jump
+- Raw hex viewer with raw offset jump, RVA jump, entry jump, and section quick-jump
 - ZIP and `.tgz` archive member listing
 
 ### Heuristics and triage
@@ -65,6 +69,13 @@ It is designed as a native desktop workflow with custom window chrome, an OLED-i
 - Common-key XOR previews
 - Repeating multi-byte XOR pattern detection
 
+### Workflow quality
+
+- Recent target list in the sidebar
+- Copy-path and open-folder actions for the active target
+- Dedicated `Resources` surface for PE metadata
+- Responsive layout for compact and wide desktop windows
+
 ## Tech Stack
 
 - Rust
@@ -72,6 +83,7 @@ It is designed as a native desktop workflow with custom window chrome, an OLED-i
 - `egui`
 - `egui_extras`
 - `goblin`
+- `pelite`
 - `capstone`
 - `zip`
 - `tar`
@@ -103,11 +115,11 @@ cargo build --release
 - OLED-style dark surface system
 - Responsive layout for compact and wide window sizes
 - Scroll-first behavior for smaller windows instead of clipping
+- Dedicated resource/version/manifest view for PE targets
 
 ## Roadmap
 
 - RVA to raw offset translation and section-aware hex navigation
-- Resource tree, version info, and manifest parsing
 - Code cave analysis and richer TLS callback detail
 - Richer ELF and Mach-O symbol and loader views
 - Heuristic scoring for packers, injectors, and suspicious loaders
