@@ -1,50 +1,117 @@
 # Blackpoint
 
-Blackpoint is a desktop static analysis workbench for reverse engineering and binary triage on Windows.
+Blackpoint is a modern desktop binary analysis workbench built in Rust for reverse engineering, malware triage, and low-level executable inspection across PE, ELF, Mach-O, archives, and raw binaries.
 
-It is built in Rust with `eframe/egui` and focuses on a smooth native workflow for inspecting executables, libraries, archives, and mixed-format payloads without leaving a single UI.
+It is designed as a native desktop workflow with custom window chrome, an OLED-inspired interface, async analysis, drag-and-drop loading, and a responsive layout that remains usable in both compact and full-size windows.
 
-## Current Capabilities
+## Highlights
 
-- Multi-format detection for PE, ELF, Mach-O, DEX, ZIP, APK, IPA, JAR, ISO9660, MS-DOS, COM, LE/LX, NPM archives, Amiga hunk binaries, and generic binary inputs
-- PE-focused metadata including DOS/File/Optional headers, section layout, imports, exports, mitigations, compile timestamp, entry point, image base, and machine type
-- Hash generation with `MD5`, `SHA-1`, and `SHA-256`
-- Searchable string extraction with ASCII and UTF-16LE filtering
-- Entry-point disassembly using Capstone
-- XOR analysis with single-byte candidates, common-key previews, and repeating multi-byte pattern discovery
-- Archive member listing for ZIP-like and `.tgz` containers
-- Raw hex viewer with offset jump and entry-point jump
-- Custom OLED-style UI with drag-and-drop loading and async analysis overlay
+- Native Rust desktop application built with `eframe/egui`
+- Custom dark UI with responsive panels and smooth small-window behavior
+- Asynchronous analysis pipeline with animated `Analyzing...` overlay
+- Drag-and-drop file loading and custom title bar controls
+- Static triage workflow for executables, libraries, package archives, and mixed binary blobs
 
-## Stack
+## Supported Formats
+
+- PE
+- ELF
+- Mach-O
+- DEX
+- APK
+- IPA
+- JAR
+- ZIP
+- ISO9660
+- MS-DOS
+- COM
+- LE/LX
+- NPM package archives
+- Amiga hunk binaries
+- Generic binary fallback with heuristic detection
+
+## Current Features
+
+### General analysis
+
+- File metadata and format identification
+- `MD5`, `SHA-1`, and `SHA-256`
+- Architecture, machine type, subsystem, image base, entry point, section count, and timestamp
+- Detection confidence and heuristic notes
+
+### PE-focused inspection
+
+- DOS header
+- File header
+- Optional header
+- Section table with entropy and permission flags
+- Imports grouped by DLL with ordinal support
+- Exports with RVA and offset information
+- Mitigation and hardening signals such as `ASLR`, `DEP/NX`, `SEH`, and TLS callback presence
+
+### Content inspection
+
+- ASCII and UTF-16LE string extraction
+- Search and filtering in the strings view
+- Entry-point disassembly with Capstone
+- Raw hex viewer with offset jump and entry jump
+- ZIP and `.tgz` archive member listing
+
+### Heuristics and triage
+
+- Protection findings and suspicious API indicators
+- Anti-debug oriented import heuristics
+- Single-byte XOR candidate discovery
+- Common-key XOR previews
+- Repeating multi-byte XOR pattern detection
+
+## Tech Stack
 
 - Rust
-- `eframe` / `egui`
+- `eframe`
+- `egui`
+- `egui_extras`
 - `goblin`
 - `capstone`
 - `zip`
 - `tar`
 - `flate2`
 
-## Run
+## Getting Started
+
+### Run
 
 ```bash
 cargo run
 ```
 
-## Build
+### Debug build
+
+```bash
+cargo build
+```
+
+### Release build
 
 ```bash
 cargo build --release
 ```
 
+## UI Notes
+
+- Custom title bar and window controls
+- OLED-style dark surface system
+- Responsive layout for compact and wide window sizes
+- Scroll-first behavior for smaller windows instead of clipping
+
 ## Roadmap
 
-- RVA to raw offset conversion and section-aware navigation
+- RVA to raw offset translation and section-aware hex navigation
 - Resource tree, version info, and manifest parsing
-- TLS callback expansion and code cave analysis
-- Richer ELF and Mach-O symbol views
+- Code cave analysis and richer TLS callback detail
+- Richer ELF and Mach-O symbol and loader views
 - Heuristic scoring for packers, injectors, and suspicious loaders
+- Copy/export actions for strings, hashes, and paths
 
 ## Repository
 

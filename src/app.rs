@@ -147,6 +147,7 @@ impl BlackpointApp {
                     .stroke(egui::Stroke::new(1.0, Color32::from_rgb(28, 36, 48))),
             )
             .show(ctx, |ui| {
+                let compact_title = ui.available_width() < 760.0;
                 let rect = ui.max_rect();
                 let drag_id = ui.id().with("title_drag_zone");
                 let response = ui.interact(rect, drag_id, egui::Sense::click_and_drag());
@@ -162,11 +163,13 @@ impl BlackpointApp {
                                 .strong()
                                 .color(Color32::from_rgb(244, 245, 247)),
                         );
-                        ui.label(
-                            RichText::new("Static binary analysis workbench")
-                                .small()
-                                .color(Color32::from_rgb(124, 134, 147)),
-                        );
+                        if !compact_title {
+                            ui.label(
+                                RichText::new("Static binary analysis workbench")
+                                    .small()
+                                    .color(Color32::from_rgb(124, 134, 147)),
+                            );
+                        }
                     });
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -202,98 +205,240 @@ impl BlackpointApp {
     fn render_sidebar(&mut self, ctx: &egui::Context) {
         egui::SidePanel::left("nav")
             .resizable(true)
-            .default_width(240.0)
-            .min_width(210.0)
+            .default_width(248.0)
+            .min_width(200.0)
+            .frame(
+                egui::Frame::new()
+                    .fill(Color32::from_rgb(6, 9, 13))
+                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(30, 38, 49)))
+                    .inner_margin(egui::Margin {
+                        left: 14,
+                        right: 12,
+                        top: 14,
+                        bottom: 14,
+                    }),
+            )
             .show(ctx, |ui| {
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        ui.heading("Blackpoint");
-                        ui.label(RichText::new("Static analysis workbench").color(Color32::GRAY));
-                        ui.add_space(10.0);
-
-                        if ui.button("Open EXE / DLL / SYS").clicked() {
-                            self.pick_file();
-                        }
-
-                        if let Some(path) = &self.loaded_file {
-                            ui.add_space(8.0);
-                            ui.add(
-                                egui::Label::new(RichText::new(path.display().to_string()).monospace())
-                                    .wrap(),
+                        let compact_sidebar = ui.available_width() < 220.0;
+                        ui.label(
+                            RichText::new("Workspace")
+                                .small()
+                                .color(Color32::from_rgb(120, 130, 144)),
+                        );
+                        ui.label(
+                            RichText::new("Analysis Session")
+                                .size(24.0)
+                                .strong()
+                                .color(Color32::from_rgb(244, 245, 247)),
+                        );
+                        if !compact_sidebar {
+                            ui.label(
+                                RichText::new("One active target, fast navigation, clean analysis surfaces")
+                                    .small()
+                                    .color(Color32::from_rgb(126, 136, 149)),
                             );
                         }
+                        ui.add_space(12.0);
+
+                        egui::Frame::new()
+                            .fill(Color32::from_rgb(10, 14, 18))
+                            .corner_radius(egui::CornerRadius::same(24))
+                            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(43, 53, 68)))
+                            .inner_margin(egui::Margin::same(14))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    RichText::new("Target")
+                                        .small()
+                                        .color(Color32::from_rgb(145, 154, 166)),
+                                );
+                                ui.add_space(6.0);
+
+                                if let Some(path) = &self.loaded_file {
+                                    let file_name = path
+                                        .file_name()
+                                        .and_then(|name| name.to_str())
+                                        .unwrap_or("Loaded binary");
+
+                                    ui.label(
+                                        RichText::new(file_name)
+                                            .strong()
+                                            .size(20.0)
+                                            .color(Color32::from_rgb(240, 242, 245)),
+                                    );
+                                    if !compact_sidebar {
+                                        ui.add(
+                                            egui::Label::new(
+                                                RichText::new(path.display().to_string())
+                                                    .small()
+                                                    .monospace()
+                                                    .color(Color32::from_rgb(152, 161, 174)),
+                                            )
+                                            .wrap(),
+                                        );
+                                    }
+
+                                    ui.add_space(10.0);
+                                    ui.horizontal_wrapped(|ui| {
+                                        if let Some(report) = &self.report {
+                                            sidebar_pill(ui, &report.format_name);
+                                            sidebar_pill(ui, if report.is_64bit { "64-bit" } else { "32-bit" });
+                                            sidebar_pill(ui, report.subsystem.as_str());
+                                        } else {
+                                            sidebar_pill(ui, "Pending");
+                                        }
+                                    });
+                                } else {
+                                    ui.label(
+                                        RichText::new("No binary loaded")
+                                            .strong()
+                                            .color(Color32::from_rgb(230, 233, 238)),
+                                    );
+                                    if !compact_sidebar {
+                                        ui.label(
+                                            RichText::new("Open or drop an executable, library, package, or archive to begin.")
+                                                .small()
+                                                .color(Color32::from_rgb(140, 149, 160)),
+                                        );
+                                    }
+                                }
+
+                                ui.add_space(12.0);
+                                if ui
+                                    .add(
+                                        egui::Button::new(
+                                            RichText::new("Open EXE / DLL / SYS")
+                                                .size(14.0)
+                                                .color(Color32::from_rgb(247, 247, 248)),
+                                        )
+                                        .fill(Color32::from_rgb(207, 94, 57))
+                                        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(255, 197, 175)))
+                                        .corner_radius(egui::CornerRadius::same(16))
+                                        .min_size(egui::vec2(ui.available_width(), 40.0)),
+                                    )
+                                    .clicked()
+                                {
+                                    self.pick_file();
+                                }
+                            });
 
                         if let Some(error) = &self.last_error {
                             ui.add_space(10.0);
-                            ui.colored_label(Color32::from_rgb(255, 120, 120), error);
+                            egui::Frame::new()
+                                .fill(Color32::from_rgb(26, 12, 13))
+                                .corner_radius(egui::CornerRadius::same(18))
+                                .stroke(egui::Stroke::new(1.0, Color32::from_rgb(120, 46, 52)))
+                                .inner_margin(egui::Margin::same(12))
+                                .show(ui, |ui| {
+                                    ui.colored_label(Color32::from_rgb(255, 138, 138), error);
+                                });
                         }
 
                         ui.add_space(16.0);
-                        ui.separator();
-                        ui.add_space(8.0);
+                        egui::Frame::new()
+                            .fill(Color32::from_rgb(8, 11, 16))
+                            .corner_radius(egui::CornerRadius::same(24))
+                            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(37, 46, 59)))
+                            .inner_margin(egui::Margin::same(12))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    RichText::new("Surfaces")
+                                        .small()
+                                        .color(Color32::from_rgb(140, 149, 160)),
+                                );
+                                ui.add_space(8.0);
 
-                        for (tab, label) in [
-                            (ActiveTab::GeneralInfo, "General Info"),
-                            (ActiveTab::Headers, "Headers"),
-                            (ActiveTab::Hex, "Hex Viewer"),
-                            (ActiveTab::Sections, "Sections"),
-                            (ActiveTab::Imports, "Imports"),
-                            (ActiveTab::Exports, "Exports"),
-                            (ActiveTab::Strings, "Strings"),
-                            (ActiveTab::Protection, "Protection"),
-                            (ActiveTab::Xor, "XOR Analysis"),
-                            (ActiveTab::Disassembly, "Disassembly"),
-                            (ActiveTab::Archive, "Archive"),
-                        ] {
-                            let selected = self.active_tab == tab;
-                            if nav_button(ui, label, selected).clicked() {
-                                self.active_tab = tab;
-                            }
+                                for (tab, label) in [
+                                    (ActiveTab::GeneralInfo, "General Info"),
+                                    (ActiveTab::Headers, "Headers"),
+                                    (ActiveTab::Hex, "Hex Viewer"),
+                                    (ActiveTab::Sections, "Sections"),
+                                    (ActiveTab::Imports, "Imports"),
+                                    (ActiveTab::Exports, "Exports"),
+                                    (ActiveTab::Strings, "Strings"),
+                                    (ActiveTab::Protection, "Protection"),
+                                    (ActiveTab::Xor, "XOR Analysis"),
+                                    (ActiveTab::Disassembly, "Disassembly"),
+                                    (ActiveTab::Archive, "Archive"),
+                                ] {
+                                    let selected = self.active_tab == tab;
+                                    if nav_button(ui, label, selected).clicked() {
+                                        self.active_tab = tab;
+                                    }
+                                }
+                            });
+
+                        if !compact_sidebar {
+                            ui.add_space(12.0);
+                            egui::Frame::new()
+                                .fill(Color32::from_rgb(8, 11, 16))
+                                .corner_radius(egui::CornerRadius::same(22))
+                                .stroke(egui::Stroke::new(1.0, Color32::from_rgb(34, 42, 54)))
+                                .inner_margin(egui::Margin::same(12))
+                                .show(ui, |ui| {
+                                    ui.label(
+                                        RichText::new("Next")
+                                            .small()
+                                            .color(Color32::from_rgb(140, 149, 160)),
+                                    );
+                                    ui.add_space(4.0);
+                                    ui.label(
+                                        RichText::new("Hex RVA/raw mapping, resources, heuristics, and symbol depth")
+                                            .small()
+                                            .color(Color32::from_rgb(184, 191, 200)),
+                                    );
+                                });
                         }
 
-                        ui.add_space(14.0);
-                        ui.separator();
-                        ui.add_space(8.0);
-                        ui.label(
-                            RichText::new("Next: Hex RVA/raw mapping, resources, heuristics, and symbol depth")
-                                .small()
-                                .color(Color32::GRAY),
-                        );
                         ui.add_space(8.0);
                     });
             });
     }
 
     fn render_main(&mut self, ctx: &egui::Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            let Some(report) = &self.report else {
-                render_empty_state(ui);
-                return;
-            };
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::new()
+                    .fill(Color32::from_rgb(4, 7, 10))
+                    .inner_margin(egui::Margin::same(10)),
+            )
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(Color32::from_rgb(5, 8, 12))
+                    .corner_radius(egui::CornerRadius::same(28))
+                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(26, 34, 44)))
+                    .inner_margin(egui::Margin::same(18))
+                    .show(ui, |ui| {
+                        let Some(report) = &self.report else {
+                            render_empty_state(ui);
+                            return;
+                        };
 
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| match self.active_tab {
-                    ActiveTab::GeneralInfo => render_overview(ui, report),
-                    ActiveTab::Hex => render_hex_viewer(ui, report, &mut self.hex_offset_input, &mut self.hex_status),
-                    ActiveTab::Sections => render_sections(ui, report),
-                    ActiveTab::Imports => render_imports(ui, report),
-                    ActiveTab::Exports => render_exports(ui, report),
-                    ActiveTab::Disassembly => render_disassembly(ui, report),
-                    ActiveTab::Strings => render_strings(
-                        ui,
-                        report,
-                        &mut self.string_filter,
-                        &mut self.strings_case_sensitive,
-                        &mut self.show_ascii_strings,
-                        &mut self.show_utf16_strings,
-                    ),
-                    ActiveTab::Protection => render_protection(ui, report),
-                    ActiveTab::Xor => render_xor(ui, report),
-                    ActiveTab::Archive => render_archive(ui, report),
-                    ActiveTab::Headers => render_headers(ui, report),
-                });
+                        egui::ScrollArea::vertical()
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| match self.active_tab {
+                                ActiveTab::GeneralInfo => render_overview(ui, report),
+                                ActiveTab::Hex => render_hex_viewer(ui, report, &mut self.hex_offset_input, &mut self.hex_status),
+                                ActiveTab::Sections => render_sections(ui, report),
+                                ActiveTab::Imports => render_imports(ui, report),
+                                ActiveTab::Exports => render_exports(ui, report),
+                                ActiveTab::Disassembly => render_disassembly(ui, report),
+                                ActiveTab::Strings => render_strings(
+                                    ui,
+                                    report,
+                                    &mut self.string_filter,
+                                    &mut self.strings_case_sensitive,
+                                    &mut self.show_ascii_strings,
+                                    &mut self.show_utf16_strings,
+                                ),
+                                ActiveTab::Protection => render_protection(ui, report),
+                                ActiveTab::Xor => render_xor(ui, report),
+                                ActiveTab::Archive => render_archive(ui, report),
+                                ActiveTab::Headers => render_headers(ui, report),
+                            });
+                    });
         });
     }
 
@@ -435,18 +580,19 @@ fn configure_theme(ctx: &egui::Context) {
 }
 
 fn render_empty_state(ui: &mut Ui) {
+    let compact = ui.available_width() < 840.0;
     ui.vertical_centered(|ui| {
-        ui.add_space(104.0);
+        ui.add_space(if compact { 48.0 } else { 104.0 });
         egui::Frame::new()
             .fill(Color32::from_rgb(7, 9, 12))
             .corner_radius(egui::CornerRadius::same(34))
             .stroke(egui::Stroke::new(1.0, Color32::from_rgb(34, 42, 56)))
             .inner_margin(egui::Margin::same(32))
             .show(ui, |ui| {
-                ui.set_max_width(620.0);
+                ui.set_max_width((ui.available_width() - 24.0).max(320.0).min(620.0));
                 ui.label(
                     RichText::new("Static analysis for real binaries")
-                        .size(30.0)
+                        .size(if compact { 24.0 } else { 30.0 })
                         .strong()
                         .color(Color32::from_rgb(246, 247, 248)),
                 );
@@ -456,7 +602,7 @@ fn render_empty_state(ui: &mut Ui) {
                         .color(Color32::from_rgb(140, 149, 160)),
                 );
                 ui.add_space(18.0);
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     pill(ui, "Drag & Drop");
                     pill(ui, "Multi-Format");
                     pill(ui, "Disassembly");
@@ -468,77 +614,282 @@ fn render_empty_state(ui: &mut Ui) {
 fn render_overview(ui: &mut Ui, report: &BinaryReport) {
     render_panel_title(ui, "General Info", "Core file metadata, hashes, mitigations, and build signals");
 
+    let width = ui.available_width();
+    let imported_api_count = report.imports.iter().map(|dll| dll.functions.len()).sum::<usize>();
+    let architecture = if report.is_64bit { "64-bit" } else { "32-bit / n.a." };
+    let profile_rows = vec![
+        ("Family".to_string(), report.format_family.clone()),
+        ("Confidence".to_string(), report.detection_confidence.clone()),
+        ("Architecture".to_string(), architecture.to_string()),
+        ("Subsystem".to_string(), report.subsystem.clone()),
+        ("Machine".to_string(), report.machine_type.clone()),
+        ("Section Count".to_string(), report.section_count.to_string()),
+        ("Timestamp".to_string(), format!("0x{:08X}", report.timestamp)),
+        ("File Size".to_string(), format!("{} bytes", report.file_size)),
+    ];
+    let layout_rows = vec![
+        ("Image Base".to_string(), format!("0x{:X}", report.image_base)),
+        ("Entry Point".to_string(), format!("0x{:X}", report.entry_point)),
+        ("Section Alignment".to_string(), format!("0x{:X}", report.section_alignment)),
+        ("File Alignment".to_string(), format!("0x{:X}", report.file_alignment)),
+        ("ASLR".to_string(), bool_badge(report.protections.aslr).to_string()),
+        ("DEP / NX".to_string(), bool_badge(report.protections.dep_nx).to_string()),
+        ("SEH".to_string(), bool_badge(report.protections.seh_enabled).to_string()),
+        ("TLS Callbacks".to_string(), report.protections.tls_callbacks.to_string()),
+    ];
+    let hash_rows = vec![
+        ("MD5".to_string(), report.md5.clone()),
+        ("SHA-1".to_string(), report.sha1.clone()),
+        ("SHA-256".to_string(), report.sha256_placeholder.clone()),
+    ];
+    let file_name = report
+        .path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Unknown binary");
+
     framed_panel(ui, |ui| {
-        egui::Grid::new("overview_grid")
-            .num_columns(2)
-            .spacing([28.0, 10.0])
-            .show(ui, |ui| {
-                overview_row(ui, "Path", &report.path.display().to_string());
-                overview_row(ui, "MD5", &report.md5);
-                overview_row(ui, "SHA-1", &report.sha1);
-                overview_row(ui, "Format", &report.format_name);
-                overview_row(ui, "Family", &report.format_family);
-                overview_row(ui, "Confidence", &report.detection_confidence);
-                overview_row(ui, "File Size", &format!("{} bytes", report.file_size));
-                overview_row(ui, "Machine", &report.machine_type);
-                overview_row(ui, "Section Count", &report.section_count.to_string());
-                overview_row(ui, "Architecture", if report.is_64bit { "64-bit" } else { "32-bit / n.a." });
-                overview_row(ui, "Subsystem", &report.subsystem);
-                overview_row(ui, "Image Base", &format!("0x{:X}", report.image_base));
-                overview_row(ui, "Entry Point", &format!("0x{:X}", report.entry_point));
-                overview_row(ui, "ASLR", bool_badge(report.protections.aslr));
-                overview_row(ui, "DEP / NX", bool_badge(report.protections.dep_nx));
-                overview_row(ui, "SEH", bool_badge(report.protections.seh_enabled));
-                overview_row(ui, "TLS Callbacks", &report.protections.tls_callbacks.to_string());
-                overview_row(ui, "Section Alignment", &format!("0x{:X}", report.section_alignment));
-                overview_row(ui, "File Alignment", &format!("0x{:X}", report.file_alignment));
-                overview_row(ui, "Timestamp", &format!("0x{:08X}", report.timestamp));
-                overview_row(ui, "SHA-256", &report.sha256_placeholder);
+        if width >= 1600.0 {
+            ui.columns(2, |columns| {
+                columns[0].vertical(|ui| {
+                    render_overview_identity(ui, report, file_name, architecture);
+                });
+
+                columns[1].vertical(|ui| {
+                    render_overview_snapshot(ui, report, imported_api_count);
+                });
             });
+        } else {
+            render_overview_identity(ui, report, file_name, architecture);
+            ui.add_space(14.0);
+            render_overview_snapshot(ui, report, imported_api_count);
+        }
     });
 
-    ui.add_space(18.0);
-    ui.columns(3, |columns| {
-        stat_card(
-            &mut columns[0],
+    ui.add_space(14.0);
+    if width >= 1500.0 {
+        ui.columns(2, |columns| {
+            framed_panel(&mut columns[0], |ui| {
+                render_overview_rows(ui, "Binary Profile", &profile_rows);
+            });
+
+            framed_panel(&mut columns[1], |ui| {
+                render_overview_rows(ui, "Execution Layout", &layout_rows);
+            });
+        });
+    } else {
+        framed_panel(ui, |ui| {
+            render_overview_rows(ui, "Binary Profile", &profile_rows);
+        });
+        ui.add_space(14.0);
+        framed_panel(ui, |ui| {
+            render_overview_rows(ui, "Execution Layout", &layout_rows);
+        });
+    }
+
+    ui.add_space(14.0);
+    if width >= 1500.0 {
+        ui.columns(2, |columns| {
+            framed_panel(&mut columns[0], |ui| {
+                render_overview_rows(ui, "Hashes", &hash_rows);
+            });
+
+            framed_panel(&mut columns[1], |ui| {
+                render_notes_panel(ui, &report.notes);
+            });
+        });
+    } else {
+        framed_panel(ui, |ui| {
+            render_overview_rows(ui, "Hashes", &hash_rows);
+        });
+        ui.add_space(14.0);
+        framed_panel(ui, |ui| {
+            render_notes_panel(ui, &report.notes);
+        });
+    }
+}
+
+fn render_overview_rows(ui: &mut Ui, title: &str, rows: &[(String, String)]) {
+    ui.label(
+        RichText::new(title)
+            .strong()
+            .color(Color32::from_rgb(229, 233, 237)),
+    );
+    ui.add_space(8.0);
+    egui::Grid::new(title)
+        .num_columns(2)
+        .spacing([20.0, 10.0])
+        .show(ui, |ui| {
+            for (label, value) in rows {
+                overview_row(ui, label, value);
+            }
+        });
+}
+
+fn render_overview_identity(ui: &mut Ui, report: &BinaryReport, file_name: &str, architecture: &str) {
+    ui.label(
+        RichText::new(file_name)
+            .size(24.0)
+            .strong()
+            .color(Color32::from_rgb(245, 246, 248)),
+    );
+    ui.add_space(4.0);
+
+    egui::Frame::new()
+        .fill(Color32::from_rgb(8, 11, 16))
+        .corner_radius(egui::CornerRadius::same(18))
+        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(36, 45, 58)))
+        .inner_margin(egui::Margin::same(12))
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new(report.path.display().to_string())
+                    .small()
+                    .monospace()
+                    .color(Color32::from_rgb(152, 161, 174)),
+            );
+        });
+
+    ui.add_space(10.0);
+    ui.horizontal_wrapped(|ui| {
+        pill(ui, &report.format_name);
+        pill(ui, architecture);
+        pill(ui, report.subsystem.as_str());
+    });
+
+    ui.add_space(14.0);
+    ui.horizontal_wrapped(|ui| {
+        inline_fact(ui, "Machine", &report.machine_type);
+        inline_fact(ui, "Entry", &format!("0x{:X}", report.entry_point));
+        inline_fact(ui, "Image Base", &format!("0x{:X}", report.image_base));
+        inline_fact(ui, "Size", &format!("{} bytes", report.file_size));
+    });
+}
+
+fn render_overview_snapshot(ui: &mut Ui, report: &BinaryReport, imported_api_count: usize) {
+    ui.label(
+        RichText::new("Snapshot")
+            .strong()
+            .color(Color32::from_rgb(229, 233, 237)),
+    );
+    ui.add_space(8.0);
+    if ui.available_width() >= 760.0 {
+        ui.columns(2, |columns| {
+            metric_tile(
+                &mut columns[0],
+                "Sections",
+                &report.sections.len().to_string(),
+                Color32::from_rgb(90, 160, 255),
+            );
+            metric_tile(
+                &mut columns[1],
+                "Imported APIs",
+                &imported_api_count.to_string(),
+                Color32::from_rgb(92, 184, 92),
+            );
+        });
+        ui.add_space(10.0);
+        ui.columns(2, |columns| {
+            metric_tile(
+                &mut columns[0],
+                "Strings",
+                &report.strings.len().to_string(),
+                Color32::from_rgb(210, 144, 72),
+            );
+            metric_tile(
+                &mut columns[1],
+                "TLS Callbacks",
+                &report.protections.tls_callbacks.to_string(),
+                Color32::from_rgb(198, 122, 255),
+            );
+        });
+    } else {
+        metric_tile(
+            ui,
             "Sections",
             &report.sections.len().to_string(),
             Color32::from_rgb(90, 160, 255),
         );
-        stat_card(
-            &mut columns[1],
+        ui.add_space(10.0);
+        metric_tile(
+            ui,
             "Imported APIs",
-            &report
-                .imports
-                .iter()
-                .map(|dll| dll.functions.len())
-                .sum::<usize>()
-                .to_string(),
+            &imported_api_count.to_string(),
             Color32::from_rgb(92, 184, 92),
         );
-        stat_card(
-            &mut columns[2],
+        ui.add_space(10.0);
+        metric_tile(
+            ui,
             "Strings",
             &report.strings.len().to_string(),
             Color32::from_rgb(210, 144, 72),
         );
-    });
-
-    ui.add_space(16.0);
-    framed_panel(ui, |ui| {
-        ui.label(
-            RichText::new("Heuristic Notes")
-                .strong()
-                .color(Color32::from_rgb(229, 233, 237)),
+        ui.add_space(10.0);
+        metric_tile(
+            ui,
+            "TLS Callbacks",
+            &report.protections.tls_callbacks.to_string(),
+            Color32::from_rgb(198, 122, 255),
         );
-        ui.add_space(6.0);
-        for note in &report.notes {
-            ui.label(
-                RichText::new(format!("* {note}"))
-                    .color(Color32::from_rgb(162, 172, 184)),
-            );
-        }
-    });
+    }
+}
+
+fn render_notes_panel(ui: &mut Ui, notes: &[String]) {
+    ui.label(
+        RichText::new("Heuristic Notes")
+            .strong()
+            .color(Color32::from_rgb(229, 233, 237)),
+    );
+    ui.add_space(8.0);
+    for note in notes {
+        ui.label(
+            RichText::new(format!("* {note}"))
+                .color(Color32::from_rgb(162, 172, 184)),
+        );
+    }
+}
+
+fn metric_tile(ui: &mut Ui, title: &str, value: &str, accent: Color32) {
+    egui::Frame::new()
+        .fill(Color32::from_rgb(10, 14, 18))
+        .corner_radius(egui::CornerRadius::same(22))
+        .stroke(egui::Stroke::new(1.0, accent.gamma_multiply(0.75)))
+        .inner_margin(egui::Margin::same(14))
+        .show(ui, |ui| {
+            ui.set_min_width(130.0);
+            ui.set_min_height(94.0);
+            ui.vertical_centered(|ui| {
+                ui.label(RichText::new(title).small().color(Color32::from_rgb(145, 154, 166)));
+                ui.add_space(6.0);
+                ui.label(
+                    RichText::new(value)
+                        .size(24.0)
+                        .strong()
+                        .color(accent),
+                );
+            });
+        });
+}
+
+fn inline_fact(ui: &mut Ui, label: &str, value: &str) {
+    egui::Frame::new()
+        .fill(Color32::from_rgb(8, 11, 16))
+        .corner_radius(egui::CornerRadius::same(16))
+        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(34, 43, 55)))
+        .inner_margin(egui::Margin::symmetric(12, 8))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(label)
+                        .small()
+                        .color(Color32::from_rgb(145, 154, 166)),
+                );
+                ui.label(
+                    RichText::new(value)
+                        .monospace()
+                        .color(Color32::from_rgb(214, 220, 228)),
+                );
+            });
+        });
 }
 
 fn render_hex_viewer(
@@ -548,12 +899,13 @@ fn render_hex_viewer(
     hex_status: &mut Option<String>,
 ) {
     render_panel_title(ui, "Hex Viewer", "Raw byte view with offset jump and synchronized ASCII preview");
+    let compact = ui.available_width() < 760.0;
 
     framed_panel(ui, |ui| {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("Offset").color(Color32::from_rgb(188, 195, 205)));
             ui.add_sized(
-                [180.0, 28.0],
+                [if compact { (ui.available_width() - 120.0).max(140.0) } else { 180.0 }, 28.0],
                 egui::TextEdit::singleline(hex_offset_input).hint_text("0x401000 or 16384"),
             );
 
@@ -573,14 +925,16 @@ fn render_hex_viewer(
                 *hex_status = Some(format!("Jumped near entry point at raw offset 0x{offset:X}"));
             }
 
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(
-                    RichText::new(format!("{} bytes loaded", report.raw_bytes.len()))
-                        .small()
-                        .monospace()
-                        .color(Color32::from_rgb(126, 136, 149)),
-                );
-            });
+            if !compact {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(
+                        RichText::new(format!("{} bytes loaded", report.raw_bytes.len()))
+                            .small()
+                            .monospace()
+                            .color(Color32::from_rgb(126, 136, 149)),
+                    );
+                });
+            }
         });
 
         if let Some(status) = hex_status.as_deref() {
@@ -765,12 +1119,13 @@ fn render_strings(
     show_utf16: &mut bool,
 ) {
     render_panel_title(ui, "Strings", "Searchable string extraction with format filters");
+    let compact = ui.available_width() < 820.0;
 
     framed_panel(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("Search").color(Color32::from_rgb(188, 195, 205)));
                 ui.add_sized(
-                    [340.0, 28.0],
+                    [if compact { (ui.available_width() - 80.0).max(180.0) } else { 340.0 }, 28.0],
                     egui::TextEdit::singleline(string_filter).hint_text("needle, dll path, api key, domain..."),
                 );
                 if ui.button("Clear").clicked() {
@@ -801,7 +1156,7 @@ fn render_strings(
 
     let visible_count = filtered.len().min(100);
 
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.label(
             RichText::new(format!("showing {} of {} visible / {} total", visible_count, filtered.len(), report.strings.len()))
                 .small()
@@ -1011,13 +1366,23 @@ fn render_archive(ui: &mut Ui, report: &BinaryReport) {
 fn render_headers(ui: &mut Ui, report: &BinaryReport) {
     render_panel_title(ui, "Headers", "DOS, file, and optional header detail");
 
-    framed_panel(ui, |ui| {
-        ui.columns(3, |columns| {
-            render_kv_group(&mut columns[0], "DOS Header", &report.dos_header);
-            render_kv_group(&mut columns[1], "File Header", &report.file_header);
-            render_kv_group(&mut columns[2], "Optional Header", &report.optional_header);
+    if ui.available_width() >= 1100.0 {
+        framed_panel(ui, |ui| {
+            ui.columns(3, |columns| {
+                render_kv_group(&mut columns[0], "DOS Header", &report.dos_header);
+                render_kv_group(&mut columns[1], "File Header", &report.file_header);
+                render_kv_group(&mut columns[2], "Optional Header", &report.optional_header);
+            });
         });
-    });
+    } else {
+        framed_panel(ui, |ui| {
+            render_kv_group(ui, "DOS Header", &report.dos_header);
+            ui.add_space(12.0);
+            render_kv_group(ui, "File Header", &report.file_header);
+            ui.add_space(12.0);
+            render_kv_group(ui, "Optional Header", &report.optional_header);
+        });
+    }
 
     ui.add_space(12.0);
     framed_panel(ui, |ui| {
@@ -1028,60 +1393,48 @@ fn render_headers(ui: &mut Ui, report: &BinaryReport) {
 fn render_protection(ui: &mut Ui, report: &BinaryReport) {
     render_panel_title(ui, "Protection", "Mitigations, anti-debug indicators, and suspicious API heuristics");
 
-    ui.columns(2, |columns| {
-        framed_panel(&mut columns[0], |ui| {
-            render_kv_group(
-                ui,
-                "Mitigations",
-                &[
-                    KeyValueRow {
-                        key: "ASLR".to_string(),
-                        value: bool_badge(report.protections.aslr).to_string(),
-                    },
-                    KeyValueRow {
-                        key: "DEP / NX".to_string(),
-                        value: bool_badge(report.protections.dep_nx).to_string(),
-                    },
-                    KeyValueRow {
-                        key: "SEH Enabled".to_string(),
-                        value: bool_badge(report.protections.seh_enabled).to_string(),
-                    },
-                    KeyValueRow {
-                        key: "NO_SEH".to_string(),
-                        value: bool_badge(report.protections.no_seh).to_string(),
-                    },
-                    KeyValueRow {
-                        key: "TLS Callbacks".to_string(),
-                        value: report.protections.tls_callbacks.to_string(),
-                    },
-                ],
-            );
-        });
+    let mitigations = [
+        KeyValueRow {
+            key: "ASLR".to_string(),
+            value: bool_badge(report.protections.aslr).to_string(),
+        },
+        KeyValueRow {
+            key: "DEP / NX".to_string(),
+            value: bool_badge(report.protections.dep_nx).to_string(),
+        },
+        KeyValueRow {
+            key: "SEH Enabled".to_string(),
+            value: bool_badge(report.protections.seh_enabled).to_string(),
+        },
+        KeyValueRow {
+            key: "NO_SEH".to_string(),
+            value: bool_badge(report.protections.no_seh).to_string(),
+        },
+        KeyValueRow {
+            key: "TLS Callbacks".to_string(),
+            value: report.protections.tls_callbacks.to_string(),
+        },
+    ];
 
-        framed_panel(&mut columns[1], |ui| {
-            ui.label(
-                RichText::new("Findings")
-                    .strong()
-                    .color(Color32::from_rgb(229, 233, 237)),
-            );
-            ui.add_space(6.0);
-            for finding in &report.protection_findings {
-                ui.label(
-                    RichText::new(format!(
-                        "[{}] {}: {}",
-                        finding.severity.to_uppercase(),
-                        finding.title,
-                        finding.detail
-                    ))
-                    .color(match finding.severity {
-                        "high" => Color32::from_rgb(235, 104, 104),
-                        "medium" => Color32::from_rgb(233, 184, 97),
-                        _ => Color32::from_rgb(150, 180, 150),
-                    }),
-                );
-            }
+    if ui.available_width() >= 1200.0 {
+        ui.columns(2, |columns| {
+            framed_panel(&mut columns[0], |ui| {
+                render_kv_group(ui, "Mitigations", &mitigations);
+            });
+
+            framed_panel(&mut columns[1], |ui| {
+                render_findings(ui, &report.protection_findings);
+            });
         });
-    });
+    } else {
+        framed_panel(ui, |ui| {
+            render_kv_group(ui, "Mitigations", &mitigations);
+        });
+        ui.add_space(12.0);
+        framed_panel(ui, |ui| {
+            render_findings(ui, &report.protection_findings);
+        });
+    }
 }
 
 fn render_xor(ui: &mut Ui, report: &BinaryReport) {
@@ -1091,53 +1444,45 @@ fn render_xor(ui: &mut Ui, report: &BinaryReport) {
         "Single-byte candidates, repeating multi-byte patterns, and common-key previews",
     );
 
-    ui.columns(2, |columns| {
-        framed_panel(&mut columns[0], |ui| {
-            ui.label(
-                RichText::new("Single-byte XOR Candidates")
-                    .strong()
-                    .color(Color32::from_rgb(229, 233, 237)),
-            );
-            ui.add_space(8.0);
-            if report.xor_candidates.is_empty() {
-                ui.label("No high-confidence single-byte XOR candidates found.");
-            } else {
-                for candidate in &report.xor_candidates {
-                    ui.label(
-                        RichText::new(format!(
-                            "{} | key={} | {:.1}% | {}",
-                            candidate.source, candidate.key, candidate.readability, candidate.preview
-                        ))
-                        .monospace()
-                        .color(Color32::from_rgb(186, 194, 204)),
-                    );
-                }
-            }
-        });
+    if ui.available_width() >= 1200.0 {
+        ui.columns(2, |columns| {
+            framed_panel(&mut columns[0], |ui| {
+                render_xor_candidates_panel(
+                    ui,
+                    "Single-byte XOR Candidates",
+                    &report.xor_candidates,
+                    "No high-confidence single-byte XOR candidates found.",
+                );
+            });
 
-        framed_panel(&mut columns[1], |ui| {
-            ui.label(
-                RichText::new("Common-Key Hits")
-                    .strong()
-                    .color(Color32::from_rgb(229, 233, 237)),
-            );
-            ui.add_space(8.0);
-            if report.xor_common_key_hits.is_empty() {
-                ui.label("No useful previews for common XOR keys.");
-            } else {
-                for candidate in &report.xor_common_key_hits {
-                    ui.label(
-                        RichText::new(format!(
-                            "{} | key={} | {:.1}% | {}",
-                            candidate.source, candidate.key, candidate.readability, candidate.preview
-                        ))
-                        .monospace()
-                        .color(Color32::from_rgb(186, 194, 204)),
-                    );
-                }
-            }
+            framed_panel(&mut columns[1], |ui| {
+                render_xor_candidates_panel(
+                    ui,
+                    "Common-Key Hits",
+                    &report.xor_common_key_hits,
+                    "No useful previews for common XOR keys.",
+                );
+            });
         });
-    });
+    } else {
+        framed_panel(ui, |ui| {
+            render_xor_candidates_panel(
+                ui,
+                "Single-byte XOR Candidates",
+                &report.xor_candidates,
+                "No high-confidence single-byte XOR candidates found.",
+            );
+        });
+        ui.add_space(12.0);
+        framed_panel(ui, |ui| {
+            render_xor_candidates_panel(
+                ui,
+                "Common-Key Hits",
+                &report.xor_common_key_hits,
+                "No useful previews for common XOR keys.",
+            );
+        });
+    }
 
     ui.add_space(12.0);
     framed_panel(ui, |ui| {
@@ -1199,6 +1544,58 @@ fn render_kv_group(ui: &mut Ui, title: &str, rows: &[KeyValueRow]) {
     });
 }
 
+fn render_findings(ui: &mut Ui, findings: &[crate::analyzer::ProtectionFinding]) {
+    ui.label(
+        RichText::new("Findings")
+            .strong()
+            .color(Color32::from_rgb(229, 233, 237)),
+    );
+    ui.add_space(6.0);
+    for finding in findings {
+        ui.label(
+            RichText::new(format!(
+                "[{}] {}: {}",
+                finding.severity.to_uppercase(),
+                finding.title,
+                finding.detail
+            ))
+            .color(match finding.severity {
+                "high" => Color32::from_rgb(235, 104, 104),
+                "medium" => Color32::from_rgb(233, 184, 97),
+                _ => Color32::from_rgb(150, 180, 150),
+            }),
+        );
+    }
+}
+
+fn render_xor_candidates_panel(
+    ui: &mut Ui,
+    title: &str,
+    candidates: &[crate::analyzer::XorCandidate],
+    empty_message: &str,
+) {
+    ui.label(
+        RichText::new(title)
+            .strong()
+            .color(Color32::from_rgb(229, 233, 237)),
+    );
+    ui.add_space(8.0);
+    if candidates.is_empty() {
+        ui.label(empty_message);
+    } else {
+        for candidate in candidates {
+            ui.label(
+                RichText::new(format!(
+                    "{} | key={} | {:.1}% | {}",
+                    candidate.source, candidate.key, candidate.readability, candidate.preview
+                ))
+                .monospace()
+                .color(Color32::from_rgb(186, 194, 204)),
+            );
+        }
+    }
+}
+
 fn overview_row(ui: &mut Ui, label: &str, value: &str) {
     ui.label(RichText::new(label).color(Color32::GRAY));
     ui.label(RichText::new(value).text_style(TextStyle::Monospace));
@@ -1211,22 +1608,6 @@ fn bool_badge(value: bool) -> &'static str {
     } else {
         "Disabled"
     }
-}
-
-fn stat_card(ui: &mut Ui, title: &str, value: &str, accent: Color32) {
-    egui::Frame::group(ui.style())
-        .fill(Color32::from_rgb(10, 14, 18))
-        .corner_radius(egui::CornerRadius::same(28))
-        .stroke(egui::Stroke::new(1.0, accent.gamma_multiply(0.7)))
-        .inner_margin(egui::Margin::same(12))
-        .show(ui, |ui| {
-            ui.set_min_height(104.0);
-            ui.vertical_centered(|ui| {
-                ui.add_space(8.0);
-                ui.label(RichText::new(title).small().color(Color32::GRAY));
-                ui.label(RichText::new(value).size(30.0).color(accent));
-            });
-        });
 }
 
 fn framed_panel(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) {
@@ -1302,6 +1683,21 @@ fn pill(ui: &mut Ui, text: &str) {
         .inner_margin(egui::Margin::symmetric(14, 8))
         .show(ui, |ui| {
             ui.label(RichText::new(text).color(Color32::from_rgb(189, 196, 206)));
+        });
+}
+
+fn sidebar_pill(ui: &mut Ui, text: &str) {
+    egui::Frame::new()
+        .fill(Color32::from_rgb(12, 16, 22))
+        .corner_radius(egui::CornerRadius::same(14))
+        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(38, 47, 60)))
+        .inner_margin(egui::Margin::symmetric(10, 6))
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new(text)
+                    .small()
+                    .color(Color32::from_rgb(196, 202, 212)),
+            );
         });
 }
 
