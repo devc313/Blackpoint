@@ -17,6 +17,7 @@ use zip::ZipArchive;
 pub struct BinaryReport {
     pub path: PathBuf,
     pub file_size: usize,
+    pub raw_bytes: Vec<u8>,
     pub md5: String,
     pub sha1: String,
     pub sha256_placeholder: String,
@@ -204,6 +205,7 @@ fn base_report(path: PathBuf, buffer: &[u8]) -> BinaryReport {
     BinaryReport {
         path,
         file_size: buffer.len(),
+        raw_bytes: buffer.to_vec(),
         md5: hex_digest::<Md5>(buffer),
         sha1: hex_digest::<Sha1>(buffer),
         sha256_placeholder: hex_sha256(buffer),

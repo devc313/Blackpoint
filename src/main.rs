@@ -1,7 +1,7 @@
 mod analyzer;
 mod app;
 
-use app::VibeAnalyzerApp;
+use app::BlackpointApp;
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -17,6 +17,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Blackpoint",
         options,
-        Box::new(|cc| Ok(Box::new(VibeAnalyzerApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(BlackpointApp::new(cc)))),
     )
 }

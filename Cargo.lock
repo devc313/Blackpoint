@@ -490,6 +490,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
 
 [[package]]
+name = "blackpoint"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "capstone",
+ "eframe",
+ "egui",
+ "egui_extras",
+ "flate2",
+ "goblin",
+ "md-5",
+ "rfd",
+ "sha1",
+ "sha2",
+ "tar",
+ "zip",
+]
+
+[[package]]
 name = "block"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3503,25 +3522,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "vibe-analyzer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "capstone",
- "eframe",
- "egui",
- "egui_extras",
- "flate2",
- "goblin",
- "md-5",
- "rfd",
- "sha1",
- "sha2",
- "tar",
- "zip",
-]
 
 [[package]]
 name = "walkdir"

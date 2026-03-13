@@ -8,6 +8,7 @@ use std::time::Instant;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ActiveTab {
     GeneralInfo,
+    Hex,
     Sections,
     Imports,
     Exports,
@@ -19,12 +20,14 @@ enum ActiveTab {
     Headers,
 }
 
-pub struct VibeAnalyzerApp {
+pub struct BlackpointApp {
     active_tab: ActiveTab,
     loaded_file: Option<PathBuf>,
     report: Option<BinaryReport>,
     last_error: Option<String>,
     string_filter: String,
+    hex_offset_input: String,
+    hex_status: Option<String>,
     strings_case_sensitive: bool,
     show_ascii_strings: bool,
     show_utf16_strings: bool,
@@ -34,7 +37,7 @@ pub struct VibeAnalyzerApp {
     analyzing_path: Option<PathBuf>,
 }
 
-impl VibeAnalyzerApp {
+impl BlackpointApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         configure_theme(&cc.egui_ctx);
 
@@ -44,6 +47,8 @@ impl VibeAnalyzerApp {
             report: None,
             last_error: None,
             string_filter: String::new(),
+            hex_offset_input: "0x0".to_string(),
+            hex_status: None,
             strings_case_sensitive: false,
             show_ascii_strings: true,
             show_utf16_strings: true,
@@ -73,6 +78,8 @@ impl VibeAnalyzerApp {
         self.analyzing_since = Some(Instant::now());
         self.analyzing_path = Some(path);
         self.last_error = None;
+        self.hex_status = None;
+        self.hex_offset_input = "0x0".to_string();
 
         std::thread::spawn(move || {
             let result = analyze_file(&analyze_path).map_err(|err| err.to_string());
@@ -92,6 +99,7 @@ impl VibeAnalyzerApp {
                 self.analyzing_since = None;
                 self.analyzing_path = None;
                 self.last_error = None;
+                self.hex_status = None;
             }
             Ok(Err(err)) => {
                 self.analysis_receiver = None;
@@ -188,55 +196,66 @@ impl VibeAnalyzerApp {
     fn render_sidebar(&mut self, ctx: &egui::Context) {
         egui::SidePanel::left("nav")
             .resizable(true)
-            .default_width(260.0)
+            .default_width(240.0)
+            .min_width(210.0)
             .show(ctx, |ui| {
-                ui.heading("Blackpoint");
-                ui.label(RichText::new("Static binary triage workbench").color(Color32::GRAY));
-                ui.add_space(10.0);
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.heading("Blackpoint");
+                        ui.label(RichText::new("Static analysis workbench").color(Color32::GRAY));
+                        ui.add_space(10.0);
 
-                if ui.button("Open EXE / DLL / SYS").clicked() {
-                    self.pick_file();
-                }
+                        if ui.button("Open EXE / DLL / SYS").clicked() {
+                            self.pick_file();
+                        }
 
-                if let Some(path) = &self.loaded_file {
-                    ui.add_space(8.0);
-                    ui.label(RichText::new(path.display().to_string()).monospace());
-                }
+                        if let Some(path) = &self.loaded_file {
+                            ui.add_space(8.0);
+                            ui.add(
+                                egui::Label::new(RichText::new(path.display().to_string()).monospace())
+                                    .wrap(),
+                            );
+                        }
 
-                if let Some(error) = &self.last_error {
-                    ui.add_space(10.0);
-                    ui.colored_label(Color32::from_rgb(255, 120, 120), error);
-                }
+                        if let Some(error) = &self.last_error {
+                            ui.add_space(10.0);
+                            ui.colored_label(Color32::from_rgb(255, 120, 120), error);
+                        }
 
-                ui.add_space(16.0);
-                ui.separator();
-                ui.add_space(8.0);
+                        ui.add_space(16.0);
+                        ui.separator();
+                        ui.add_space(8.0);
 
-                for (tab, label) in [
-                    (ActiveTab::GeneralInfo, "General Info"),
-                    (ActiveTab::Headers, "Headers"),
-                    (ActiveTab::Sections, "Sections"),
-                    (ActiveTab::Imports, "Imports"),
-                    (ActiveTab::Exports, "Exports"),
-                    (ActiveTab::Strings, "Strings"),
-                    (ActiveTab::Protection, "Protection"),
-                    (ActiveTab::Xor, "XOR Analysis"),
-                    (ActiveTab::Disassembly, "Disassembly"),
-                    (ActiveTab::Archive, "Archive"),
-                ] {
-                    let selected = self.active_tab == tab;
-                    if nav_button(ui, label, selected).clicked() {
-                        self.active_tab = tab;
-                    }
-                }
+                        for (tab, label) in [
+                            (ActiveTab::GeneralInfo, "General Info"),
+                            (ActiveTab::Headers, "Headers"),
+                            (ActiveTab::Hex, "Hex Viewer"),
+                            (ActiveTab::Sections, "Sections"),
+                            (ActiveTab::Imports, "Imports"),
+                            (ActiveTab::Exports, "Exports"),
+                            (ActiveTab::Strings, "Strings"),
+                            (ActiveTab::Protection, "Protection"),
+                            (ActiveTab::Xor, "XOR Analysis"),
+                            (ActiveTab::Disassembly, "Disassembly"),
+                            (ActiveTab::Archive, "Archive"),
+                        ] {
+                            let selected = self.active_tab == tab;
+                            if nav_button(ui, label, selected).clicked() {
+                                self.active_tab = tab;
+                            }
+                        }
 
-                ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                    ui.label(
-                        RichText::new("Roadmap: Capstone / LIEF / yara-x / graph view")
-                            .small()
-                            .color(Color32::GRAY),
-                    );
-                });
+                        ui.add_space(14.0);
+                        ui.separator();
+                        ui.add_space(8.0);
+                        ui.label(
+                            RichText::new("Next: Hex RVA/raw mapping, resources, heuristics, and symbol depth")
+                                .small()
+                                .color(Color32::GRAY),
+                        );
+                        ui.add_space(8.0);
+                    });
             });
     }
 
@@ -247,25 +266,28 @@ impl VibeAnalyzerApp {
                 return;
             };
 
-            match self.active_tab {
-                ActiveTab::GeneralInfo => render_overview(ui, report),
-                ActiveTab::Sections => render_sections(ui, report),
-                ActiveTab::Imports => render_imports(ui, report),
-                ActiveTab::Exports => render_exports(ui, report),
-                ActiveTab::Disassembly => render_disassembly(ui, report),
-                ActiveTab::Strings => render_strings(
-                    ui,
-                    report,
-                    &mut self.string_filter,
-                    &mut self.strings_case_sensitive,
-                    &mut self.show_ascii_strings,
-                    &mut self.show_utf16_strings,
-                ),
-                ActiveTab::Protection => render_protection(ui, report),
-                ActiveTab::Xor => render_xor(ui, report),
-                ActiveTab::Archive => render_archive(ui, report),
-                ActiveTab::Headers => render_headers(ui, report),
-            }
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| match self.active_tab {
+                    ActiveTab::GeneralInfo => render_overview(ui, report),
+                    ActiveTab::Hex => render_hex_viewer(ui, report, &mut self.hex_offset_input, &mut self.hex_status),
+                    ActiveTab::Sections => render_sections(ui, report),
+                    ActiveTab::Imports => render_imports(ui, report),
+                    ActiveTab::Exports => render_exports(ui, report),
+                    ActiveTab::Disassembly => render_disassembly(ui, report),
+                    ActiveTab::Strings => render_strings(
+                        ui,
+                        report,
+                        &mut self.string_filter,
+                        &mut self.strings_case_sensitive,
+                        &mut self.show_ascii_strings,
+                        &mut self.show_utf16_strings,
+                    ),
+                    ActiveTab::Protection => render_protection(ui, report),
+                    ActiveTab::Xor => render_xor(ui, report),
+                    ActiveTab::Archive => render_archive(ui, report),
+                    ActiveTab::Headers => render_headers(ui, report),
+                });
         });
     }
 
@@ -361,7 +383,7 @@ impl VibeAnalyzerApp {
     }
 }
 
-impl eframe::App for VibeAnalyzerApp {
+impl eframe::App for BlackpointApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_analysis();
         if self.analysis_receiver.is_some() {
@@ -506,10 +528,120 @@ fn render_overview(ui: &mut Ui, report: &BinaryReport) {
         ui.add_space(6.0);
         for note in &report.notes {
             ui.label(
-                RichText::new(format!("• {note}"))
+                RichText::new(format!("* {note}"))
                     .color(Color32::from_rgb(162, 172, 184)),
             );
         }
+    });
+}
+
+fn render_hex_viewer(
+    ui: &mut Ui,
+    report: &BinaryReport,
+    hex_offset_input: &mut String,
+    hex_status: &mut Option<String>,
+) {
+    render_panel_title(ui, "Hex Viewer", "Raw byte view with offset jump and synchronized ASCII preview");
+
+    framed_panel(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Offset").color(Color32::from_rgb(188, 195, 205)));
+            ui.add_sized(
+                [180.0, 28.0],
+                egui::TextEdit::singleline(hex_offset_input).hint_text("0x401000 or 16384"),
+            );
+
+            if ui.button("Jump").clicked() {
+                match parse_offset_input(hex_offset_input, report.raw_bytes.len()) {
+                    Ok(offset) => {
+                        *hex_offset_input = format!("0x{offset:X}");
+                        *hex_status = Some(format!("Jumped to offset 0x{offset:X}"));
+                    }
+                    Err(err) => *hex_status = Some(err),
+                }
+            }
+
+            if ui.button("Entry").clicked() {
+                let offset = raw_offset_for_entry(report).min(report.raw_bytes.len().saturating_sub(1));
+                *hex_offset_input = format!("0x{offset:X}");
+                *hex_status = Some(format!("Jumped near entry point at raw offset 0x{offset:X}"));
+            }
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(
+                    RichText::new(format!("{} bytes loaded", report.raw_bytes.len()))
+                        .small()
+                        .monospace()
+                        .color(Color32::from_rgb(126, 136, 149)),
+                );
+            });
+        });
+
+        if let Some(status) = hex_status.as_deref() {
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new(status)
+                    .small()
+                    .color(if status.starts_with("Invalid") || status.contains("outside") {
+                        Color32::from_rgb(235, 104, 104)
+                    } else {
+                        Color32::from_rgb(150, 180, 150)
+                    }),
+            );
+        }
+    });
+
+    ui.add_space(10.0);
+
+    let selected_offset = parse_offset_input(hex_offset_input, report.raw_bytes.len()).unwrap_or(0);
+    let row_size = 16usize;
+    let selected_row = selected_offset / row_size;
+    let start_row = selected_row.saturating_sub(8);
+    let total_rows = report.raw_bytes.len().div_ceil(row_size);
+    let end_row = (start_row + 160).min(total_rows);
+
+    framed_panel(ui, |ui| {
+        ui.label(
+            RichText::new("Offset        Hex Bytes                                              ASCII")
+                .monospace()
+                .color(Color32::from_rgb(142, 151, 163)),
+        );
+        ui.add_space(6.0);
+
+        egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
+            for row_index in start_row..end_row {
+                let start = row_index * row_size;
+                let end = (start + row_size).min(report.raw_bytes.len());
+                let row = &report.raw_bytes[start..end];
+                let is_focus_row = selected_offset >= start && selected_offset < end;
+
+                let line = format!(
+                    "{:08X}    {:<48}    {}",
+                    start,
+                    format_hex_bytes(row, row_size),
+                    format_ascii_preview(row)
+                );
+
+                let text = RichText::new(line).monospace().color(if is_focus_row {
+                    Color32::from_rgb(255, 210, 188)
+                } else {
+                    Color32::from_rgb(196, 202, 212)
+                });
+
+                if is_focus_row {
+                    egui::Frame::new()
+                        .fill(Color32::from_rgb(26, 17, 14))
+                        .corner_radius(egui::CornerRadius::same(10))
+                        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(207, 94, 57)))
+                        .inner_margin(egui::Margin::symmetric(8, 4))
+                        .show(ui, |ui| {
+                            ui.label(text);
+                        });
+                } else {
+                    ui.label(text);
+                }
+            }
+        });
     });
 }
 
@@ -757,6 +889,75 @@ fn render_disassembly(ui: &mut Ui, report: &BinaryReport) {
                 }
             });
     });
+}
+
+fn parse_offset_input(input: &str, len: usize) -> Result<usize, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() || len == 0 {
+        return Ok(0);
+    }
+
+    let parsed = if let Some(hex) = trimmed.strip_prefix("0x").or_else(|| trimmed.strip_prefix("0X")) {
+        usize::from_str_radix(hex, 16).map_err(|_| "Invalid hex offset".to_string())?
+    } else {
+        trimmed.parse::<usize>().map_err(|_| "Invalid decimal offset".to_string())?
+    };
+
+    if parsed >= len {
+        return Err(format!("Offset 0x{parsed:X} is outside the loaded file"));
+    }
+
+    Ok(parsed)
+}
+
+fn raw_offset_for_entry(report: &BinaryReport) -> usize {
+    report
+        .sections
+        .iter()
+        .find(|section| {
+            let start = section.virtual_address as u64;
+            let span = section.virtual_size.max(section.raw_size) as u64;
+            let end = start.saturating_add(span);
+            report.entry_point >= start && report.entry_point < end
+        })
+        .map(|section| {
+            let delta = report.entry_point.saturating_sub(section.virtual_address as u64) as usize;
+            section.raw_address as usize + delta
+        })
+        .unwrap_or_default()
+}
+
+fn format_hex_bytes(row: &[u8], row_size: usize) -> String {
+    let mut output = String::new();
+
+    for index in 0..row_size {
+        if index == 8 {
+            output.push(' ');
+        }
+        if index > 0 {
+            output.push(' ');
+        }
+
+        if let Some(byte) = row.get(index) {
+            output.push_str(&format!("{byte:02X}"));
+        } else {
+            output.push_str("  ");
+        }
+    }
+
+    output
+}
+
+fn format_ascii_preview(row: &[u8]) -> String {
+    row.iter()
+        .map(|byte| {
+            if byte.is_ascii_graphic() || *byte == b' ' {
+                *byte as char
+            } else {
+                '.'
+            }
+        })
+        .collect()
 }
 
 fn render_archive(ui: &mut Ui, report: &BinaryReport) {

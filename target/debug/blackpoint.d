@@ -1,0 +1,1 @@
+C:\Users\Administrator\Desktop\vibe\target\debug\blackpoint.exe: C:\Users\Administrator\Desktop\vibe\src\analyzer.rs C:\Users\Administrator\Desktop\vibe\src\app.rs C:\Users\Administrator\Desktop\vibe\src\main.rs
