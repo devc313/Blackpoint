@@ -133,12 +133,18 @@ impl BlackpointApp {
 
     fn render_title_bar(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("title_bar")
-            .exact_height(52.0)
+            .exact_height(56.0)
             .frame(
                 egui::Frame::new()
-                    .fill(Color32::from_rgb(5, 7, 10))
-                    .inner_margin(egui::Margin::symmetric(14, 10))
-                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(24, 31, 41))),
+                    .fill(Color32::from_rgb(6, 8, 12))
+                    .corner_radius(egui::CornerRadius {
+                        nw: 22,
+                        ne: 22,
+                        sw: 0,
+                        se: 0,
+                    })
+                    .inner_margin(egui::Margin::symmetric(16, 12))
+                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(28, 36, 48))),
             )
             .show(ctx, |ui| {
                 let rect = ui.max_rect();
@@ -304,7 +310,7 @@ impl BlackpointApp {
         let card = egui::Rect::from_center_size(rect.center(), egui::vec2(420.0, 180.0));
         painter.rect(
             card,
-            24.0,
+            30.0,
             Color32::from_rgba_unmultiplied(14, 19, 26, 240),
             egui::Stroke::new(2.0, Color32::from_rgb(207, 94, 57)),
             egui::StrokeKind::Outside,
@@ -349,9 +355,9 @@ impl BlackpointApp {
             .show(ctx, |ui| {
                 egui::Frame::new()
                     .fill(Color32::from_rgb(11, 15, 20))
-                    .corner_radius(egui::CornerRadius::same(22))
-                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(70, 84, 104)))
-                    .inner_margin(egui::Margin::same(20))
+                    .corner_radius(egui::CornerRadius::same(28))
+                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(76, 90, 111)))
+                    .inner_margin(egui::Margin::same(22))
                     .show(ui, |ui| {
                         ui.set_width(440.0);
                         ui.horizontal(|ui| {
@@ -420,11 +426,11 @@ fn configure_theme(ctx: &egui::Context) {
     style.visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0, Color32::WHITE);
     style.visuals.widgets.open.bg_fill = Color32::from_rgb(17, 22, 30);
     style.visuals.widgets.open.bg_stroke = egui::Stroke::new(1.0, Color32::from_rgb(61, 74, 93));
-    style.visuals.window_stroke = egui::Stroke::new(1.0, Color32::from_rgb(52, 62, 78));
-    style.visuals.window_corner_radius = egui::CornerRadius::same(18);
-    style.spacing.item_spacing = egui::vec2(10.0, 10.0);
-    style.spacing.button_padding = egui::vec2(14.0, 9.0);
-    style.spacing.window_margin = egui::Margin::same(14);
+    style.visuals.window_stroke = egui::Stroke::new(1.0, Color32::from_rgb(58, 70, 88));
+    style.visuals.window_corner_radius = egui::CornerRadius::same(24);
+    style.spacing.item_spacing = egui::vec2(12.0, 12.0);
+    style.spacing.button_padding = egui::vec2(16.0, 10.0);
+    style.spacing.window_margin = egui::Margin::same(16);
     ctx.set_style(style);
 }
 
@@ -433,9 +439,9 @@ fn render_empty_state(ui: &mut Ui) {
         ui.add_space(104.0);
         egui::Frame::new()
             .fill(Color32::from_rgb(7, 9, 12))
-            .corner_radius(egui::CornerRadius::same(28))
-            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(25, 31, 42)))
-            .inner_margin(egui::Margin::same(28))
+            .corner_radius(egui::CornerRadius::same(34))
+            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(34, 42, 56)))
+            .inner_margin(egui::Margin::same(32))
             .show(ui, |ui| {
                 ui.set_max_width(620.0);
                 ui.label(
@@ -631,7 +637,7 @@ fn render_hex_viewer(
                 if is_focus_row {
                     egui::Frame::new()
                         .fill(Color32::from_rgb(26, 17, 14))
-                        .corner_radius(egui::CornerRadius::same(10))
+                        .corner_radius(egui::CornerRadius::same(16))
                         .stroke(egui::Stroke::new(1.0, Color32::from_rgb(207, 94, 57)))
                         .inner_margin(egui::Margin::symmetric(8, 4))
                         .show(ui, |ui| {
@@ -1176,7 +1182,12 @@ fn render_xor(ui: &mut Ui, report: &BinaryReport) {
 }
 
 fn render_kv_group(ui: &mut Ui, title: &str, rows: &[KeyValueRow]) {
-    ui.group(|ui| {
+    egui::Frame::new()
+        .fill(Color32::from_rgb(11, 15, 20))
+        .corner_radius(egui::CornerRadius::same(22))
+        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(42, 52, 66)))
+        .inner_margin(egui::Margin::same(14))
+        .show(ui, |ui| {
         ui.strong(title);
         ui.add_space(6.0);
         for row in rows {
@@ -1204,11 +1215,12 @@ fn bool_badge(value: bool) -> &'static str {
 
 fn stat_card(ui: &mut Ui, title: &str, value: &str, accent: Color32) {
     egui::Frame::group(ui.style())
-        .fill(Color32::from_rgb(9, 12, 16))
-        .corner_radius(egui::CornerRadius::same(20))
-        .stroke(egui::Stroke::new(1.0, accent.gamma_multiply(0.8)))
+        .fill(Color32::from_rgb(10, 14, 18))
+        .corner_radius(egui::CornerRadius::same(28))
+        .stroke(egui::Stroke::new(1.0, accent.gamma_multiply(0.7)))
+        .inner_margin(egui::Margin::same(12))
         .show(ui, |ui| {
-            ui.set_min_height(92.0);
+            ui.set_min_height(104.0);
             ui.vertical_centered(|ui| {
                 ui.add_space(8.0);
                 ui.label(RichText::new(title).small().color(Color32::GRAY));
@@ -1219,10 +1231,10 @@ fn stat_card(ui: &mut Ui, title: &str, value: &str, accent: Color32) {
 
 fn framed_panel(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) {
     egui::Frame::new()
-        .fill(Color32::from_rgb(9, 12, 16))
-        .corner_radius(egui::CornerRadius::same(18))
-        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(49, 59, 74)))
-        .inner_margin(egui::Margin::same(14))
+        .fill(Color32::from_rgb(9, 13, 18))
+        .corner_radius(egui::CornerRadius::same(26))
+        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(54, 66, 82)))
+        .inner_margin(egui::Margin::same(16))
         .show(ui, add_contents);
 }
 
@@ -1257,12 +1269,12 @@ fn nav_button(ui: &mut Ui, label: &str, selected: bool) -> egui::Response {
     let fill = if selected {
         Color32::from_rgb(207, 94, 57)
     } else {
-        Color32::from_rgb(9, 12, 17)
+        Color32::from_rgb(10, 14, 19)
     };
     let stroke = if selected {
         Color32::from_rgb(255, 197, 175)
     } else {
-        Color32::from_rgb(25, 31, 42)
+        Color32::from_rgb(31, 39, 51)
     };
 
     ui.add(
@@ -1277,17 +1289,17 @@ fn nav_button(ui: &mut Ui, label: &str, selected: bool) -> egui::Response {
         )
         .fill(fill)
         .stroke(egui::Stroke::new(1.0, stroke))
-        .corner_radius(egui::CornerRadius::same(12))
-        .min_size(egui::vec2(ui.available_width(), 34.0)),
+        .corner_radius(egui::CornerRadius::same(18))
+        .min_size(egui::vec2(ui.available_width(), 38.0)),
     )
 }
 
 fn pill(ui: &mut Ui, text: &str) {
     egui::Frame::new()
         .fill(Color32::from_rgb(13, 17, 23))
-        .corner_radius(egui::CornerRadius::same(24))
+        .corner_radius(egui::CornerRadius::same(30))
         .stroke(egui::Stroke::new(1.0, Color32::from_rgb(31, 39, 51)))
-        .inner_margin(egui::Margin::symmetric(12, 6))
+        .inner_margin(egui::Margin::symmetric(14, 8))
         .show(ui, |ui| {
             ui.label(RichText::new(text).color(Color32::from_rgb(189, 196, 206)));
         });
@@ -1306,9 +1318,9 @@ fn titlebar_button(
             .size(14.0)
             .color(Color32::from_rgb(242, 243, 245)),
     )
-    .min_size(egui::vec2(34.0, 26.0))
-    .fill(Color32::from_rgb(13, 17, 23))
-    .corner_radius(egui::CornerRadius::same(10))
+    .min_size(egui::vec2(38.0, 30.0))
+    .fill(Color32::from_rgb(12, 16, 22))
+    .corner_radius(egui::CornerRadius::same(14))
     .stroke(egui::Stroke::new(1.0, accent));
 
     let response = ui.add(button).on_hover_text(tooltip);
