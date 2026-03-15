@@ -1,8 +1,9 @@
 use crate::analyzer::{analyze_file, BinaryReport, KeyValueRow};
+use crate::report_export::{default_snapshot_path, write_snapshot};
 use eframe::egui::{self, Color32, RichText, TextStyle, Ui};
 use egui_extras::{Column, TableBuilder};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
@@ -82,6 +83,19 @@ enum LandingAction {
     Retry,
 }
 
+#[derive(Clone, Copy)]
+enum UiMessageTone {
+    Info,
+    Success,
+    Error,
+}
+
+struct UiMessage {
+    text: String,
+    tone: UiMessageTone,
+    expires_at: Instant,
+}
+
 const APP_VERSION: &str = "BLACKPOINT V2.4.0-STABLE";
 const CANVAS_MAX_WIDTH: f32 = 1480.0;
 const MAX_VISIBLE_STRING_ROWS: usize = 100;
@@ -154,6 +168,7 @@ pub struct BlackpointApp {
     analyzing_since: Option<Instant>,
     analyzing_path: Option<PathBuf>,
     recent_files: Vec<PathBuf>,
+    ui_message: Option<UiMessage>,
 }
 
 impl BlackpointApp {
@@ -179,6 +194,7 @@ impl BlackpointApp {
             analyzing_since: None,
             analyzing_path: None,
             recent_files: Vec::new(),
+            ui_message: None,
         }
     }
 
@@ -189,6 +205,105 @@ impl BlackpointApp {
 
         if let Some(path) = file {
             self.load_path(path);
+        }
+    }
+
+    fn set_ui_message(&mut self, tone: UiMessageTone, text: impl Into<String>) {
+        self.ui_message = Some(UiMessage {
+            text: text.into(),
+            tone,
+            expires_at: Instant::now() + Duration::from_secs(6),
+        });
+    }
+
+    fn prune_ui_message(&mut self) {
+        if self
+            .ui_message
+            .as_ref()
+            .is_some_and(|message| Instant::now() >= message.expires_at)
+        {
+            self.ui_message = None;
+        }
+    }
+
+    fn copy_target_path(&mut self, ctx: &egui::Context, path: &Path) {
+        ctx.copy_text(path.display().to_string());
+        self.set_ui_message(
+            UiMessageTone::Success,
+            "Copied active target path to clipboard.",
+        );
+    }
+
+    fn copy_hashes(&mut self, ctx: &egui::Context) {
+        let Some(report) = self.report.as_ref() else {
+            self.set_ui_message(UiMessageTone::Error, "No analyzed target is available yet.");
+            return;
+        };
+
+        ctx.copy_text(format!(
+            "MD5: {}\nSHA-1: {}\nSHA-256: {}",
+            report.md5, report.sha1, report.sha256
+        ));
+        self.set_ui_message(UiMessageTone::Success, "Copied report hashes to clipboard.");
+    }
+
+    fn reveal_target_in_explorer(&mut self, path: &Path) {
+        match Command::new("explorer")
+            .arg(format!("/select,{}", path.display()))
+            .spawn()
+        {
+            Ok(_) => {
+                self.set_ui_message(UiMessageTone::Info, "Revealed active target in Explorer.");
+            }
+            Err(err) => {
+                self.set_ui_message(
+                    UiMessageTone::Error,
+                    format!("Failed to reveal target in Explorer: {err}"),
+                );
+            }
+        }
+    }
+
+    fn export_snapshot(&mut self) {
+        let Some(report) = self.report.as_ref() else {
+            self.set_ui_message(UiMessageTone::Error, "No analyzed target is available yet.");
+            return;
+        };
+
+        let suggested = default_snapshot_path(report);
+        let default_name = suggested
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("analysis.blackpoint.json")
+            .to_string();
+
+        let mut dialog = rfd::FileDialog::new().set_title("Export analysis snapshot");
+        if let Some(parent) = suggested.parent() {
+            dialog = dialog.set_directory(parent);
+        }
+        dialog = dialog.set_file_name(&default_name);
+
+        let Some(output_path) = dialog.save_file() else {
+            return;
+        };
+
+        match write_snapshot(report, &output_path) {
+            Ok(()) => {
+                let exported_name = output_path
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or(default_name.as_str());
+                self.set_ui_message(
+                    UiMessageTone::Success,
+                    format!("Exported snapshot to {exported_name}."),
+                );
+            }
+            Err(err) => {
+                self.set_ui_message(
+                    UiMessageTone::Error,
+                    format!("Snapshot export failed: {err}"),
+                );
+            }
         }
     }
 
@@ -230,6 +345,7 @@ impl BlackpointApp {
         self.analyzing_since = Some(Instant::now());
         self.analyzing_path = Some(path.clone());
         self.last_error = None;
+        self.ui_message = None;
         self.reset_transient_view_state();
         self.drag_hovering = false;
         self.push_recent_file(path.clone());
@@ -469,7 +585,12 @@ impl BlackpointApp {
                             self.pick_file();
                         }
 
-                        if let Some(path) = &self.loaded_file {
+                        if let Some(path) = self.loaded_file.clone() {
+                            let has_report = self.report.is_some();
+                            let mut copy_path_clicked = false;
+                            let mut reveal_clicked = false;
+                            let mut copy_hashes_clicked = false;
+                            let mut export_snapshot_clicked = false;
                             ui.add_space(14.0);
                             egui::Frame::new()
                                 .fill(t.panel)
@@ -524,14 +645,34 @@ impl BlackpointApp {
                                     ui.add_space(10.0);
                                     ui.horizontal_wrapped(|ui| {
                                         if ghost_button(ui, "Copy Path").clicked() {
-                                            ctx.copy_text(path.display().to_string());
+                                            copy_path_clicked = true;
                                         }
-                                        if ghost_button(ui, "Open Folder").clicked() {
-                                            let folder = path.parent().unwrap_or(path.as_path());
-                                            let _ = Command::new("explorer").arg(folder).spawn();
+                                        if ghost_button(ui, "Reveal in Explorer").clicked() {
+                                            reveal_clicked = true;
+                                        }
+                                        if has_report && ghost_button(ui, "Copy Hashes").clicked() {
+                                            copy_hashes_clicked = true;
+                                        }
+                                        if has_report
+                                            && ghost_button(ui, "Export Snapshot").clicked()
+                                        {
+                                            export_snapshot_clicked = true;
                                         }
                                     });
                                 });
+
+                            if copy_path_clicked {
+                                self.copy_target_path(ctx, &path);
+                            }
+                            if reveal_clicked {
+                                self.reveal_target_in_explorer(&path);
+                            }
+                            if copy_hashes_clicked {
+                                self.copy_hashes(ctx);
+                            }
+                            if export_snapshot_clicked {
+                                self.export_snapshot();
+                            }
                         }
 
                         if let Some(error) = &self.last_error {
@@ -716,6 +857,14 @@ impl BlackpointApp {
         } else {
             "No Target Loaded"
         };
+        let active_message = self.ui_message.as_ref().map(|message| {
+            let color = match message.tone {
+                UiMessageTone::Info => t.status,
+                UiMessageTone::Success => t.success,
+                UiMessageTone::Error => t.danger,
+            };
+            (message.text.as_str(), color)
+        });
 
         egui::TopBottomPanel::bottom("status_bar")
             .exact_height(30.0)
@@ -733,6 +882,10 @@ impl BlackpointApp {
                     ui.label(RichText::new(engine_status).size(10.5).color(t.text));
                     ui.separator();
                     ui.label(RichText::new(target_status).size(10.0).color(t.status));
+                    if let Some((message, color)) = active_message {
+                        ui.separator();
+                        ui.label(RichText::new(message).size(10.0).color(color));
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
                             RichText::new(APP_VERSION)
@@ -840,8 +993,9 @@ impl BlackpointApp {
 
 impl eframe::App for BlackpointApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.prune_ui_message();
         self.poll_analysis();
-        if self.analysis_receiver.is_some() {
+        if self.analysis_receiver.is_some() || self.ui_message.is_some() {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
         self.handle_drag_and_drop(ctx);

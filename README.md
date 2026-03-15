@@ -10,6 +10,7 @@ It is designed as a native desktop workflow with custom window chrome, an OLED-i
 - Custom dark UI with responsive panels, pixel-tight section surfaces, and explicit empty/error/loading states
 - Asynchronous analysis pipeline with animated `Analyzing...` overlay and in-place retry flow
 - Drag-and-drop file loading and custom title bar controls
+- Snapshot export workflow for portable JSON triage artifacts
 - Static triage workflow for executables, libraries, package archives, and mixed binary blobs
 - Fail-soft parsing for PE resources, archive enumeration, and entry-point disassembly so partial analysis still renders
 
@@ -73,10 +74,11 @@ It is designed as a native desktop workflow with custom window chrome, an OLED-i
 ### Workflow quality
 
 - Recent target list in the sidebar
-- Copy-path and open-folder actions for the active target
+- Copy-path, copy-hashes, Explorer reveal, and JSON snapshot export actions for the active target
 - Dedicated `Resources` surface for PE metadata
 - Responsive layout for compact and wide desktop windows
 - Memory-bounded string and archive previews to avoid pathological UI allocations on large inputs
+- Status-bar feedback for copy/export actions and other non-analysis workflows
 - CI verification with `cargo fmt`, `cargo clippy -D warnings`, `cargo test`, and release builds
 
 ## Tech Stack
@@ -133,8 +135,8 @@ cargo test --all-targets --all-features
 - Code cave analysis and richer TLS callback detail
 - Richer ELF and Mach-O symbol and loader views
 - Heuristic scoring for packers, injectors, and suspicious loaders
-- Copy/export actions for strings, hashes, and paths
-- Persisted session history and exportable analysis snapshots
+- Copy/export actions for strings and richer artifact bundles
+- Persisted session history
 
 ## Repository
 

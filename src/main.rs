@@ -2,6 +2,7 @@
 
 mod analyzer;
 mod app;
+mod report_export;
 
 use app::BlackpointApp;
 
