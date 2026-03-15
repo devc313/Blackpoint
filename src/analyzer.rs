@@ -24,7 +24,9 @@ pub struct BinaryReport {
     pub raw_bytes: Vec<u8>,
     pub md5: String,
     pub sha1: String,
-    pub sha256_placeholder: String,
+    pub sha256: String,
+    pub ascii_string_count: usize,
+    pub utf16_string_count: usize,
     pub format_name: String,
     pub format_family: String,
     pub detection_confidence: String,
@@ -47,6 +49,8 @@ pub struct BinaryReport {
     pub optional_header: Vec<KeyValueRow>,
     pub disassembly: Vec<DisassembledInstruction>,
     pub archive_entries: Vec<ArchiveEntry>,
+    pub archive_entry_total: usize,
+    pub archive_entries_omitted: usize,
     pub resource_entries: Vec<ResourceEntry>,
     pub version_info_rows: Vec<KeyValueRow>,
     pub pe_metadata_rows: Vec<KeyValueRow>,
@@ -95,6 +99,22 @@ pub struct ExtractedString {
     pub kind: &'static str,
     pub offset: usize,
     pub value: String,
+}
+
+#[derive(Default)]
+struct ExtractedStringsSummary {
+    entries: Vec<ExtractedString>,
+    ascii_count: usize,
+    utf16_count: usize,
+    omitted_entries: usize,
+    truncated_values: usize,
+}
+
+#[derive(Default)]
+struct ArchiveEntriesSummary {
+    entries: Vec<ArchiveEntry>,
+    total_entries: usize,
+    omitted_entries: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -167,11 +187,16 @@ struct DetectedFormat {
     notes: Vec<String>,
 }
 
+const MAX_STORED_STRINGS: usize = 20_000;
+const MAX_STRING_PREVIEW_CODE_UNITS: usize = 256;
+const MAX_STORED_ARCHIVE_ENTRIES: usize = 8_192;
+
 pub fn analyze_file(path: impl AsRef<Path>) -> Result<BinaryReport> {
     let path = path.as_ref().to_path_buf();
     let buffer = fs::read(&path).with_context(|| format!("failed to read {}", path.display()))?;
-    let mut report = base_report(path.clone(), &buffer);
     let detected = detect_file_format(&path, &buffer);
+    let strings = extract_strings(&buffer, 4);
+    let mut report = base_report(path.clone(), &buffer, strings);
 
     report.format_name = detected.name;
     report.format_family = detected.family;
@@ -189,45 +214,109 @@ pub fn analyze_file(path: impl AsRef<Path>) -> Result<BinaryReport> {
             populate_mach_report(&mut report, &macho, &buffer);
         }
         Ok(Object::Mach(Mach::Fat(_))) => {
-            report.notes.push("Fat Mach-O detected; thin-slice parsing is not yet implemented.".to_string());
+            report.notes.push(
+                "Fat Mach-O detected; thin-slice parsing is not yet implemented.".to_string(),
+            );
         }
         Ok(Object::Archive(_)) => {
-            report.notes.push("UNIX archive container detected.".to_string());
+            report
+                .notes
+                .push("UNIX archive container detected.".to_string());
         }
         Ok(Object::Unknown(_)) | Ok(_) | Err(_) => {
-            report.notes.push("Structured parser did not fully recognize this file; heuristic analysis applied.".to_string());
+            report.notes.push(
+                "Structured parser did not fully recognize this file; heuristic analysis applied."
+                    .to_string(),
+            );
         }
     }
 
     if is_zip_like(&path, &buffer) {
-        report.archive_entries = zip_entries(&buffer)?;
-        if report.notes.iter().all(|note| !note.contains("ZIP central directory")) {
-            report
-                .notes
-                .push("ZIP central directory parsed successfully.".to_string());
+        match zip_entries(&buffer) {
+            Ok(entries) => {
+                report.archive_entry_total = entries.total_entries;
+                report.archive_entries_omitted = entries.omitted_entries;
+                report.archive_entries = entries.entries;
+                if report
+                    .notes
+                    .iter()
+                    .all(|note| !note.contains("ZIP central directory"))
+                {
+                    report
+                        .notes
+                        .push("ZIP central directory parsed successfully.".to_string());
+                }
+                if report.archive_entries_omitted > 0 {
+                    report.notes.push(format!(
+                        "Archive view stored the first {MAX_STORED_ARCHIVE_ENTRIES} members and omitted {} additional entries to keep memory usage bounded.",
+                        report.archive_entries_omitted
+                    ));
+                }
+            }
+            Err(err) => {
+                report.notes.push(format!(
+                    "ZIP central directory matched, but member enumeration failed: {err}"
+                ));
+            }
         }
-    } else if is_gzip(&buffer) && path.extension().and_then(|ext| ext.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("tgz")) {
-        report.archive_entries = tgz_entries(&buffer)?;
+    } else if is_gzip(&buffer) && is_tgz_like_path(&path) {
+        match tgz_entries(&buffer) {
+            Ok(entries) => {
+                report.archive_entry_total = entries.total_entries;
+                report.archive_entries_omitted = entries.omitted_entries;
+                report.archive_entries = entries.entries;
+                report
+                    .notes
+                    .push("tar.gz package members parsed successfully.".to_string());
+                if report.archive_entries_omitted > 0 {
+                    report.notes.push(format!(
+                        "Archive view stored the first {MAX_STORED_ARCHIVE_ENTRIES} members and omitted {} additional entries to keep memory usage bounded.",
+                        report.archive_entries_omitted
+                    ));
+                }
+            }
+            Err(err) => {
+                report.notes.push(format!(
+                    "gzip stream matched a tar.gz package name, but archive traversal failed: {err}"
+                ));
+            }
+        }
+    } else if report.format_name == "ISO9660" {
         report
             .notes
-            .push("tar.gz package members parsed successfully.".to_string());
-    } else if report.format_name == "ISO9660" {
-        report.notes.push("ISO9660 volume signature found. Full filesystem walk is planned.".to_string());
+            .push("ISO9660 volume signature found. Full filesystem walk is planned.".to_string());
     }
 
     populate_xor_analysis(&mut report, &buffer);
+    report.raw_bytes = buffer;
 
     Ok(report)
 }
 
-fn base_report(path: PathBuf, buffer: &[u8]) -> BinaryReport {
+fn base_report(path: PathBuf, buffer: &[u8], strings: ExtractedStringsSummary) -> BinaryReport {
+    let mut notes = vec!["Static heuristic scan completed.".to_string()];
+    if strings.omitted_entries > 0 {
+        notes.push(format!(
+            "Strings view stored the first {MAX_STORED_STRINGS} decoded matches and omitted {} additional entries to keep memory usage bounded.",
+            strings.omitted_entries
+        ));
+    }
+    if strings.truncated_values > 0 {
+        notes.push(format!(
+            "{} long string previews were truncated to {MAX_STRING_PREVIEW_CODE_UNITS} code units for UI stability.",
+            strings.truncated_values
+        ));
+    }
+
     BinaryReport {
         path,
         file_size: buffer.len(),
-        raw_bytes: buffer.to_vec(),
+        raw_bytes: Vec::new(),
         md5: hex_digest::<Md5>(buffer),
         sha1: hex_digest::<Sha1>(buffer),
-        sha256_placeholder: hex_sha256(buffer),
+        sha256: hex_sha256(buffer),
+        ascii_string_count: strings.ascii_count,
+        utf16_string_count: strings.utf16_count,
         format_name: "Binary".to_string(),
         format_family: "Unclassified".to_string(),
         detection_confidence: "Heuristic".to_string(),
@@ -243,7 +332,7 @@ fn base_report(path: PathBuf, buffer: &[u8]) -> BinaryReport {
         sections: Vec::new(),
         imports: Vec::new(),
         exports: Vec::new(),
-        strings: extract_strings(buffer, 4),
+        strings: strings.entries,
         rich_headers: vec![KeyValueRow {
             key: "Status".to_string(),
             value: "No rich header data for this format.".to_string(),
@@ -262,12 +351,14 @@ fn base_report(path: PathBuf, buffer: &[u8]) -> BinaryReport {
         }],
         disassembly: Vec::new(),
         archive_entries: Vec::new(),
+        archive_entry_total: 0,
+        archive_entries_omitted: 0,
         resource_entries: Vec::new(),
         version_info_rows: Vec::new(),
         pe_metadata_rows: Vec::new(),
         manifest_rows: Vec::new(),
         manifest_text: None,
-        notes: vec!["Static heuristic scan completed.".to_string()],
+        notes,
         protections: ProtectionFlags::default(),
         protection_findings: Vec::new(),
         xor_candidates: Vec::new(),
@@ -286,7 +377,8 @@ fn populate_pe_report(report: &mut BinaryReport, pe: &PE, buffer: &[u8]) -> Resu
     report.format_name = "PE".to_string();
     report.format_family = "Portable Executable".to_string();
     report.detection_confidence = "Signature".to_string();
-    report.machine_type = goblin::pe::header::machine_to_str(header.coff_header.machine).to_string();
+    report.machine_type =
+        goblin::pe::header::machine_to_str(header.coff_header.machine).to_string();
     report.section_count = header.coff_header.number_of_sections as usize;
     report.is_64bit = pe.is_64;
     report.subsystem = decode_subsystem(optional.windows_fields.subsystem).to_string();
@@ -343,7 +435,10 @@ fn populate_pe_report(report: &mut BinaryReport, pe: &PE, buffer: &[u8]) -> Resu
         .iter()
         .map(|export| ExportSymbol {
             name: export.name.unwrap_or("<ordinal>").to_string(),
-            offset: export.offset.map(|offset| offset as u64).unwrap_or_default(),
+            offset: export
+                .offset
+                .map(|offset| offset as u64)
+                .unwrap_or_default(),
             rva: export.rva as u64,
         })
         .collect();
@@ -367,7 +462,10 @@ fn populate_pe_report(report: &mut BinaryReport, pe: &PE, buffer: &[u8]) -> Resu
         },
         KeyValueRow {
             key: "RelocationTable".to_string(),
-            value: format!("0x{:04X}", header.dos_header.file_address_of_relocation_table),
+            value: format!(
+                "0x{:04X}",
+                header.dos_header.file_address_of_relocation_table
+            ),
         },
     ];
 
@@ -415,7 +513,8 @@ fn populate_pe_report(report: &mut BinaryReport, pe: &PE, buffer: &[u8]) -> Resu
             key: "LinkerVersion".to_string(),
             value: format!(
                 "{}.{}",
-                optional.standard_fields.major_linker_version, optional.standard_fields.minor_linker_version
+                optional.standard_fields.major_linker_version,
+                optional.standard_fields.minor_linker_version
             ),
         },
         KeyValueRow {
@@ -466,15 +565,20 @@ fn populate_pe_report(report: &mut BinaryReport, pe: &PE, buffer: &[u8]) -> Resu
 
     report.pe_metadata_rows = build_pe_metadata_rows(pe, buffer, optional);
 
-    report.disassembly = disassemble_entry_block(pe, buffer, optional.standard_fields.address_of_entry_point)?;
+    match disassemble_entry_block(pe, buffer, optional.standard_fields.address_of_entry_point) {
+        Ok(disassembly) => report.disassembly = disassembly,
+        Err(err) => report.notes.push(format!(
+            "Entry-point disassembly preview unavailable: {err}"
+        )),
+    }
     report.protections = build_pe_protections(pe, optional.windows_fields.dll_characteristics);
     report.protection_findings = build_protection_findings(report, pe);
     populate_pe_resources(report, buffer);
 
     if report.sections.iter().any(|section| section.entropy >= 7.2) {
-        report
-            .notes
-            .push("High-entropy section detected; packed or encrypted payload is possible.".to_string());
+        report.notes.push(
+            "High-entropy section detected; packed or encrypted payload is possible.".to_string(),
+        );
     }
 
     Ok(())
@@ -497,16 +601,16 @@ fn populate_pe_resources(report: &mut BinaryReport, buffer: &[u8]) {
     };
 
     if let Err(err) = resources.fsck() {
-        report
-            .notes
-            .push(format!("Resources directory integrity issue detected: {err}"));
+        report.notes.push(format!(
+            "Resources directory integrity issue detected: {err}"
+        ));
     }
 
     match resources.root() {
         Ok(root) => collect_resource_entries(root, 0, String::new(), &mut report.resource_entries),
-        Err(err) => report
-            .notes
-            .push(format!("Resources directory exists but could not be enumerated: {err}")),
+        Err(err) => report.notes.push(format!(
+            "Resources directory exists but could not be enumerated: {err}"
+        )),
     }
 
     if let Ok(version_info) = resources.version_info() {
@@ -519,7 +623,9 @@ fn populate_pe_resources(report: &mut BinaryReport, buffer: &[u8]) {
         report.manifest_text = Some(manifest.clone());
 
         if let Some(level) = manifest_execution_level(&manifest) {
-            report.notes.push(format!("Application manifest requests `{level}` execution level."));
+            report.notes.push(format!(
+                "Application manifest requests `{level}` execution level."
+            ));
         }
     }
 }
@@ -823,7 +929,11 @@ fn populate_elf_report(report: &mut BinaryReport, elf: &goblin::elf::Elf, buffer
             let slice = buffer.get(raw_start..raw_end).unwrap_or(&[]);
 
             SectionInfo {
-                name: if name.is_empty() { format!("section_{index}") } else { name },
+                name: if name.is_empty() {
+                    format!("section_{index}")
+                } else {
+                    name
+                },
                 virtual_address: section.sh_addr as u32,
                 virtual_size: section.sh_size as u32,
                 raw_address: section.sh_offset as u32,
@@ -858,7 +968,9 @@ fn populate_elf_report(report: &mut BinaryReport, elf: &goblin::elf::Elf, buffer
         },
     ];
 
-    report.notes.push("ELF parsing is active; relocation and symbol detail can be extended next.".to_string());
+    report.notes.push(
+        "ELF parsing is active; relocation and symbol detail can be extended next.".to_string(),
+    );
 }
 
 fn populate_mach_report(report: &mut BinaryReport, macho: &goblin::mach::MachO, _buffer: &[u8]) {
@@ -900,7 +1012,9 @@ fn populate_mach_report(report: &mut BinaryReport, macho: &goblin::mach::MachO, 
         },
     ];
 
-    report.notes.push("Mach-O parsing is active; load command detail can be expanded next.".to_string());
+    report
+        .notes
+        .push("Mach-O parsing is active; load command detail can be expanded next.".to_string());
 }
 
 fn detect_file_format(path: &Path, bytes: &[u8]) -> DetectedFormat {
@@ -913,32 +1027,72 @@ fn detect_file_format(path: &Path, bytes: &[u8]) -> DetectedFormat {
     if bytes.starts_with(b"MZ") {
         if let Some(pe_offset) = pe_offset(bytes) {
             if bytes.get(pe_offset..pe_offset + 4) == Some(b"PE\0\0") {
-                return format_hit("PE", "Portable Executable", "Signature", vec!["DOS stub and PE signature matched.".to_string()]);
+                return format_hit(
+                    "PE",
+                    "Portable Executable",
+                    "Signature",
+                    vec!["DOS stub and PE signature matched.".to_string()],
+                );
             }
             if bytes.get(pe_offset..pe_offset + 2) == Some(b"LE") {
-                return format_hit("LE/LX", "Linear Executable", "Signature", vec!["Linear Executable header detected at e_lfanew.".to_string()]);
+                return format_hit(
+                    "LE/LX",
+                    "Linear Executable",
+                    "Signature",
+                    vec!["Linear Executable header detected at e_lfanew.".to_string()],
+                );
             }
             if bytes.get(pe_offset..pe_offset + 2) == Some(b"LX") {
-                return format_hit("LE/LX", "Linear Executable", "Signature", vec!["LX executable header detected at e_lfanew.".to_string()]);
+                return format_hit(
+                    "LE/LX",
+                    "Linear Executable",
+                    "Signature",
+                    vec!["LX executable header detected at e_lfanew.".to_string()],
+                );
             }
         }
-        return format_hit("MS-DOS", "DOS Executable", "Heuristic", vec!["MZ header found without a valid PE signature.".to_string()]);
+        return format_hit(
+            "MS-DOS",
+            "DOS Executable",
+            "Heuristic",
+            vec!["MZ header found without a valid PE signature.".to_string()],
+        );
     }
 
     if bytes.starts_with(b"\x7FELF") {
-        return format_hit("ELF", "Executable and Linkable Format", "Signature", vec!["ELF magic matched.".to_string()]);
+        return format_hit(
+            "ELF",
+            "Executable and Linkable Format",
+            "Signature",
+            vec!["ELF magic matched.".to_string()],
+        );
     }
 
     if is_macho_magic(bytes) {
-        return format_hit("MACH", "Mach-O", "Signature", vec!["Mach-O magic matched.".to_string()]);
+        return format_hit(
+            "MACH",
+            "Mach-O",
+            "Signature",
+            vec!["Mach-O magic matched.".to_string()],
+        );
     }
 
     if is_dex(bytes) {
-        return format_hit("DEX", "Dalvik Executable", "Signature", vec!["DEX magic matched.".to_string()]);
+        return format_hit(
+            "DEX",
+            "Dalvik Executable",
+            "Signature",
+            vec!["DEX magic matched.".to_string()],
+        );
     }
 
     if is_iso9660(bytes) {
-        return format_hit("ISO9660", "Optical Media Image", "Signature", vec!["CD001 volume descriptor signature matched.".to_string()]);
+        return format_hit(
+            "ISO9660",
+            "Optical Media Image",
+            "Signature",
+            vec!["CD001 volume descriptor signature matched.".to_string()],
+        );
     }
 
     if is_zip_like(path, bytes) {
@@ -948,22 +1102,58 @@ fn detect_file_format(path: &Path, bytes: &[u8]) -> DetectedFormat {
             "jar" => "JAR",
             _ => "ZIP",
         };
-        return format_hit(name, "ZIP Container", "Signature", vec!["ZIP local file header matched.".to_string()]);
+        return format_hit(
+            name,
+            "ZIP Container",
+            "Signature",
+            vec!["ZIP local file header matched.".to_string()],
+        );
     }
 
     if extension == "com" {
-        return format_hit("COM", "DOS COM", "Heuristic", vec![".com extension with flat binary layout heuristic.".to_string()]);
+        return format_hit(
+            "COM",
+            "DOS COM",
+            "Heuristic",
+            vec![".com extension with flat binary layout heuristic.".to_string()],
+        );
     }
 
-    if (extension == "tgz" || extension == "npm") && is_gzip(bytes) {
-        return format_hit("NPM", "Node Package Archive", "Heuristic", vec!["gzip-compressed package archive detected.".to_string()]);
+    if is_gzip(bytes) {
+        if extension == "npm" {
+            return format_hit(
+                "NPM",
+                "Node Package Archive",
+                "Heuristic",
+                vec!["gzip-compressed package archive detected.".to_string()],
+            );
+        }
+
+        if is_tgz_like_path(path) {
+            return format_hit(
+                "TGZ",
+                "Gzip Tar Archive",
+                "Heuristic",
+                vec!["gzip-compressed tar archive detected.".to_string()],
+            );
+        }
     }
 
     if is_amiga_hunk(bytes) {
-        return format_hit("Amiga", "Amiga Hunk Executable", "Signature", vec!["Amiga hunk header magic matched.".to_string()]);
+        return format_hit(
+            "Amiga",
+            "Amiga Hunk Executable",
+            "Signature",
+            vec!["Amiga hunk header magic matched.".to_string()],
+        );
     }
 
-    format_hit("Binary", "Unclassified", "Heuristic", vec!["No primary signature matched; generic binary heuristics used.".to_string()])
+    format_hit(
+        "Binary",
+        "Unclassified",
+        "Heuristic",
+        vec!["No primary signature matched; generic binary heuristics used.".to_string()],
+    )
 }
 
 fn format_hit(name: &str, family: &str, confidence: &str, notes: Vec<String>) -> DetectedFormat {
@@ -992,15 +1182,30 @@ fn is_macho_magic(bytes: &[u8]) -> bool {
 }
 
 fn is_zip_like(path: &Path, bytes: &[u8]) -> bool {
-    let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or_default();
+    let ext = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or_default();
     bytes.starts_with(b"PK\x03\x04")
         || bytes.starts_with(b"PK\x05\x06")
         || bytes.starts_with(b"PK\x07\x08")
-        || matches!(ext.to_ascii_lowercase().as_str(), "zip" | "apk" | "ipa" | "jar")
+        || matches!(
+            ext.to_ascii_lowercase().as_str(),
+            "zip" | "apk" | "ipa" | "jar"
+        )
 }
 
 fn is_gzip(bytes: &[u8]) -> bool {
     bytes.starts_with(&[0x1F, 0x8B])
+}
+
+fn is_tgz_like_path(path: &Path) -> bool {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    let lower_name = file_name.to_ascii_lowercase();
+    lower_name.ends_with(".tgz") || lower_name.ends_with(".tar.gz") || lower_name.ends_with(".npm")
 }
 
 fn is_dex(bytes: &[u8]) -> bool {
@@ -1015,32 +1220,38 @@ fn is_amiga_hunk(bytes: &[u8]) -> bool {
     bytes.get(0..4) == Some(&[0x00, 0x00, 0x03, 0xF3])
 }
 
-fn zip_entries(bytes: &[u8]) -> Result<Vec<ArchiveEntry>> {
+fn zip_entries(bytes: &[u8]) -> Result<ArchiveEntriesSummary> {
     let reader = Cursor::new(bytes);
     let mut archive = ZipArchive::new(reader).map_err(|err| anyhow!("zip parse failed: {err}"))?;
-    let mut entries = Vec::new();
+    let mut summary = ArchiveEntriesSummary::default();
 
     for index in 0..archive.len() {
         let file = archive
             .by_index(index)
             .map_err(|err| anyhow!("zip entry read failed: {err}"))?;
-        entries.push(ArchiveEntry {
-            name: file.name().to_string(),
-            kind: if file.is_dir() { "Directory" } else { "File" }.to_string(),
-            size: file.size(),
-        });
+        push_archive_entry(
+            &mut summary,
+            ArchiveEntry {
+                name: file.name().to_string(),
+                kind: if file.is_dir() { "Directory" } else { "File" }.to_string(),
+                size: file.size(),
+            },
+        );
     }
 
-    Ok(entries)
+    Ok(summary)
 }
 
-fn tgz_entries(bytes: &[u8]) -> Result<Vec<ArchiveEntry>> {
+fn tgz_entries(bytes: &[u8]) -> Result<ArchiveEntriesSummary> {
     let cursor = Cursor::new(bytes);
     let decoder = GzDecoder::new(cursor);
     let mut archive = Archive::new(decoder);
-    let mut entries = Vec::new();
+    let mut summary = ArchiveEntriesSummary::default();
 
-    for item in archive.entries().map_err(|err| anyhow!("tar entries failed: {err}"))? {
+    for item in archive
+        .entries()
+        .map_err(|err| anyhow!("tar entries failed: {err}"))?
+    {
         let file = item.map_err(|err| anyhow!("tar member read failed: {err}"))?;
         let path = file
             .path()
@@ -1048,14 +1259,35 @@ fn tgz_entries(bytes: &[u8]) -> Result<Vec<ArchiveEntry>> {
             .display()
             .to_string();
         let size = file.header().size().unwrap_or(0);
-        entries.push(ArchiveEntry {
-            name: path,
-            kind: "File".to_string(),
-            size,
-        });
+        let kind = if file.header().entry_type().is_dir() {
+            "Directory"
+        } else if file.header().entry_type().is_symlink() {
+            "Symlink"
+        } else {
+            "File"
+        };
+        push_archive_entry(
+            &mut summary,
+            ArchiveEntry {
+                name: path,
+                kind: kind.to_string(),
+                size,
+            },
+        );
     }
 
-    Ok(entries)
+    Ok(summary)
+}
+
+fn push_archive_entry(summary: &mut ArchiveEntriesSummary, entry: ArchiveEntry) {
+    summary.total_entries += 1;
+
+    if summary.entries.len() >= MAX_STORED_ARCHIVE_ENTRIES {
+        summary.omitted_entries += 1;
+        return;
+    }
+
+    summary.entries.push(entry);
 }
 
 fn decode_subsystem(subsystem: u16) -> &'static str {
@@ -1127,15 +1359,15 @@ fn shannon_entropy(bytes: &[u8]) -> f32 {
         .sum()
 }
 
-fn extract_strings(bytes: &[u8], min_len: usize) -> Vec<ExtractedString> {
-    let mut out = extract_ascii_strings(bytes, min_len);
-    out.extend(extract_utf16le_strings(bytes, min_len));
-    out.sort_by_key(|item| item.offset);
-    out
+fn extract_strings(bytes: &[u8], min_len: usize) -> ExtractedStringsSummary {
+    let mut summary = ExtractedStringsSummary::default();
+    extract_ascii_strings(bytes, min_len, &mut summary);
+    extract_utf16le_strings(bytes, min_len, &mut summary);
+    summary.entries.sort_by_key(|item| item.offset);
+    summary
 }
 
-fn extract_ascii_strings(bytes: &[u8], min_len: usize) -> Vec<ExtractedString> {
-    let mut strings = Vec::new();
+fn extract_ascii_strings(bytes: &[u8], min_len: usize, summary: &mut ExtractedStringsSummary) {
     let mut start = None;
 
     for (idx, byte) in bytes.iter().enumerate() {
@@ -1144,11 +1376,8 @@ fn extract_ascii_strings(bytes: &[u8], min_len: usize) -> Vec<ExtractedString> {
             (None, true) => start = Some(idx),
             (Some(begin), false) => {
                 if idx - begin >= min_len {
-                    strings.push(ExtractedString {
-                        kind: "ASCII",
-                        offset: begin,
-                        value: String::from_utf8_lossy(&bytes[begin..idx]).into_owned(),
-                    });
+                    let (value, truncated) = preview_ascii_string(&bytes[begin..idx]);
+                    push_extracted_string(summary, "ASCII", begin, value, truncated);
                 }
                 start = None;
             }
@@ -1158,19 +1387,13 @@ fn extract_ascii_strings(bytes: &[u8], min_len: usize) -> Vec<ExtractedString> {
 
     if let Some(begin) = start {
         if bytes.len() - begin >= min_len {
-            strings.push(ExtractedString {
-                kind: "ASCII",
-                offset: begin,
-                value: String::from_utf8_lossy(&bytes[begin..]).into_owned(),
-            });
+            let (value, truncated) = preview_ascii_string(&bytes[begin..]);
+            push_extracted_string(summary, "ASCII", begin, value, truncated);
         }
     }
-
-    strings
 }
 
-fn extract_utf16le_strings(bytes: &[u8], min_len: usize) -> Vec<ExtractedString> {
-    let mut strings = Vec::new();
+fn extract_utf16le_strings(bytes: &[u8], min_len: usize, summary: &mut ExtractedStringsSummary) {
     let mut idx = 0usize;
 
     while idx + 1 < bytes.len() {
@@ -1190,17 +1413,61 @@ fn extract_utf16le_strings(bytes: &[u8], min_len: usize) -> Vec<ExtractedString>
         }
 
         if code_units.len() >= min_len {
-            strings.push(ExtractedString {
-                kind: "UTF-16LE",
-                offset: start,
-                value: String::from_utf16_lossy(&code_units),
-            });
+            let (value, truncated) = preview_utf16_string(&code_units);
+            push_extracted_string(summary, "UTF-16LE", start, value, truncated);
         }
 
-        idx = if idx == start { idx + 2 } else { idx };
+        idx = if idx == start { idx + 1 } else { idx };
+    }
+}
+
+fn push_extracted_string(
+    summary: &mut ExtractedStringsSummary,
+    kind: &'static str,
+    offset: usize,
+    value: String,
+    truncated: bool,
+) {
+    match kind {
+        "ASCII" => summary.ascii_count += 1,
+        "UTF-16LE" => summary.utf16_count += 1,
+        _ => {}
     }
 
-    strings
+    if summary.entries.len() >= MAX_STORED_STRINGS {
+        summary.omitted_entries += 1;
+        return;
+    }
+
+    if truncated {
+        summary.truncated_values += 1;
+    }
+
+    summary.entries.push(ExtractedString {
+        kind,
+        offset,
+        value,
+    });
+}
+
+fn preview_ascii_string(bytes: &[u8]) -> (String, bool) {
+    let preview_len = bytes.len().min(MAX_STRING_PREVIEW_CODE_UNITS);
+    let mut value = String::from_utf8_lossy(&bytes[..preview_len]).into_owned();
+    let truncated = bytes.len() > preview_len;
+    if truncated {
+        value.push_str("...");
+    }
+    (value, truncated)
+}
+
+fn preview_utf16_string(code_units: &[u16]) -> (String, bool) {
+    let preview_len = code_units.len().min(MAX_STRING_PREVIEW_CODE_UNITS);
+    let mut value = String::from_utf16_lossy(&code_units[..preview_len]);
+    let truncated = code_units.len() > preview_len;
+    if truncated {
+        value.push_str("...");
+    }
+    (value, truncated)
 }
 
 fn hex_sha256(bytes: &[u8]) -> String {
@@ -1223,8 +1490,8 @@ fn hex_digest<D: Digest>(bytes: &[u8]) -> String {
 
 fn build_pe_protections(pe: &PE, dll_characteristics: u16) -> ProtectionFlags {
     use goblin::pe::dll_characteristic::{
-        IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE, IMAGE_DLLCHARACTERISTICS_NX_COMPAT,
-        IMAGE_DLLCHARACTERISTICS_NO_SEH,
+        IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE, IMAGE_DLLCHARACTERISTICS_NO_SEH,
+        IMAGE_DLLCHARACTERISTICS_NX_COMPAT,
     };
 
     ProtectionFlags {
@@ -1232,7 +1499,11 @@ fn build_pe_protections(pe: &PE, dll_characteristics: u16) -> ProtectionFlags {
         dep_nx: dll_characteristics & IMAGE_DLLCHARACTERISTICS_NX_COMPAT != 0,
         no_seh: dll_characteristics & IMAGE_DLLCHARACTERISTICS_NO_SEH != 0,
         seh_enabled: dll_characteristics & IMAGE_DLLCHARACTERISTICS_NO_SEH == 0,
-        tls_callbacks: pe.tls_data.as_ref().map(|tls| tls.callbacks.len()).unwrap_or(0),
+        tls_callbacks: pe
+            .tls_data
+            .as_ref()
+            .map(|tls| tls.callbacks.len())
+            .unwrap_or(0),
     }
 }
 
@@ -1292,7 +1563,8 @@ fn build_protection_findings(report: &BinaryReport, pe: &PE) -> Vec<ProtectionFi
     if report.sections.iter().any(|section| section.entropy > 7.0) {
         findings.push(ProtectionFinding {
             title: "High entropy section".to_string(),
-            detail: "At least one section exceeds 7.0 entropy and may be packed or encrypted.".to_string(),
+            detail: "At least one section exceeds 7.0 entropy and may be packed or encrypted."
+                .to_string(),
             severity: "high",
         });
     }
@@ -1304,7 +1576,10 @@ fn build_protection_findings(report: &BinaryReport, pe: &PE) -> Vec<ProtectionFi
         {
             findings.push(ProtectionFinding {
                 title: "Suspicious section name".to_string(),
-                detail: format!("Section {} matches a common packer/protector naming pattern.", section.name),
+                detail: format!(
+                    "Section {} matches a common packer/protector naming pattern.",
+                    section.name
+                ),
                 severity: "high",
             });
         }
@@ -1313,7 +1588,8 @@ fn build_protection_findings(report: &BinaryReport, pe: &PE) -> Vec<ProtectionFi
     if report.imports.len() <= 2 && !report.sections.is_empty() {
         findings.push(ProtectionFinding {
             title: "Low import count".to_string(),
-            detail: "Very small import surface may indicate dynamic resolution or packing.".to_string(),
+            detail: "Very small import surface may indicate dynamic resolution or packing."
+                .to_string(),
             severity: "medium",
         });
     }
@@ -1321,7 +1597,10 @@ fn build_protection_findings(report: &BinaryReport, pe: &PE) -> Vec<ProtectionFi
     if report.protections.tls_callbacks > 0 {
         findings.push(ProtectionFinding {
             title: "TLS callbacks".to_string(),
-            detail: format!("{} TLS callback(s) detected.", report.protections.tls_callbacks),
+            detail: format!(
+                "{} TLS callback(s) detected.",
+                report.protections.tls_callbacks
+            ),
             severity: "medium",
         });
     }
@@ -1347,9 +1626,15 @@ fn populate_xor_analysis(report: &mut BinaryReport, buffer: &[u8]) {
 fn xor_sources<'a>(report: &BinaryReport, buffer: &'a [u8]) -> Vec<(String, &'a [u8])> {
     let mut out = Vec::new();
 
-    for section in report.sections.iter().filter(|section| section.entropy >= 6.8) {
+    for section in report
+        .sections
+        .iter()
+        .filter(|section| section.entropy >= 6.8)
+    {
         let start = section.raw_address as usize;
-        let end = start.saturating_add(section.raw_size as usize).min(buffer.len());
+        let end = start
+            .saturating_add(section.raw_size as usize)
+            .min(buffer.len());
         if start < end {
             out.push((
                 format!("section {}", section.name),
@@ -1466,7 +1751,8 @@ fn printable_ratio(bytes: &[u8]) -> f32 {
 }
 
 fn xor_preview(bytes: &[u8]) -> String {
-    bytes.iter()
+    bytes
+        .iter()
         .map(|byte| match byte {
             0x20..=0x7E => *byte as char,
             b'\n' | b'\r' | b'\t' => ' ',
@@ -1476,7 +1762,11 @@ fn xor_preview(bytes: &[u8]) -> String {
         .collect()
 }
 
-fn disassemble_entry_block(pe: &PE, bytes: &[u8], entry_rva: u64) -> Result<Vec<DisassembledInstruction>> {
+fn disassemble_entry_block(
+    pe: &PE,
+    bytes: &[u8],
+    entry_rva: u64,
+) -> Result<Vec<DisassembledInstruction>> {
     let entry_rva_u32 =
         u32::try_from(entry_rva).map_err(|_| anyhow!("entry point RVA exceeds 32-bit PE range"))?;
 
@@ -1551,4 +1841,44 @@ fn build_capstone(is_64: bool) -> Result<Capstone> {
     };
 
     cs.map_err(|err| anyhow!("capstone init failed: {err}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recognizes_tgz_like_names() {
+        assert!(is_tgz_like_path(Path::new("bundle.tgz")));
+        assert!(is_tgz_like_path(Path::new("bundle.tar.gz")));
+        assert!(is_tgz_like_path(Path::new("bundle.NPM")));
+        assert!(!is_tgz_like_path(Path::new("bundle.gz")));
+    }
+
+    #[test]
+    fn classifies_tar_gz_as_generic_tgz_archive() {
+        let detected = detect_file_format(Path::new("sample.tar.gz"), &[0x1F, 0x8B, 0x08, 0x00]);
+        assert_eq!(detected.name, "TGZ");
+        assert_eq!(detected.family, "Gzip Tar Archive");
+    }
+
+    #[test]
+    fn keeps_npm_extension_classification() {
+        let detected = detect_file_format(Path::new("package.npm"), &[0x1F, 0x8B, 0x08, 0x00]);
+        assert_eq!(detected.name, "NPM");
+        assert_eq!(detected.family, "Node Package Archive");
+    }
+
+    #[test]
+    fn extracts_utf16le_strings_from_odd_offsets() {
+        let bytes = [
+            0xFF, b'T', 0x00, b'e', 0x00, b's', 0x00, b't', 0x00, 0x00, 0x00,
+        ];
+        let summary = extract_strings(&bytes, 4);
+        assert!(summary
+            .entries
+            .iter()
+            .any(|entry| entry.kind == "UTF-16LE" && entry.offset == 1 && entry.value == "Test"));
+        assert_eq!(summary.utf16_count, 1);
+    }
 }
