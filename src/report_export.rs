@@ -60,6 +60,63 @@ pub fn write_snapshot(report: &BinaryReport, output_path: &Path) -> Result<()> {
         .with_context(|| format!("failed to write {}", output_path.display()))
 }
 
+pub fn write_strings_txt(report: &BinaryReport, output_path: &Path) -> Result<()> {
+    if let Some(parent) = output_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create export directory {}", parent.display()))?;
+    }
+
+    let mut content = String::new();
+    for string in &report.strings {
+        let _ = writeln!(
+            content,
+            "[{}] 0x{:X}: {}",
+            string.kind, string.offset, string.value
+        );
+    }
+
+    fs::write(output_path, content.as_bytes())
+        .with_context(|| format!("failed to write {}", output_path.display()))
+}
+
+pub fn default_strings_path(report: &BinaryReport) -> PathBuf {
+    let parent = report.path.parent().unwrap_or_else(|| Path::new("."));
+    let stem = report
+        .path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("analysis");
+    parent.join(format!("{stem}.strings.txt"))
+}
+
+pub fn write_strings_csv(report: &BinaryReport, output_path: &Path) -> Result<()> {
+    if let Some(parent) = output_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create export directory {}", parent.display()))?;
+    }
+
+    let mut content = String::new();
+    content.push_str("kind,offset,value\n");
+    for string in &report.strings {
+        let escaped = string.value.replace('"', "\"\"");
+        let _ = writeln!(
+            content,
+            "{},0x{:X},\"{}\"",
+            string.kind, string.offset, escaped
+        );
+    }
+
+    fs::write(output_path, content.as_bytes())
+        .with_context(|| format!("failed to write {}", output_path.display()))
+}
+
 fn snapshot_value(report: &BinaryReport) -> JsonValue {
     let imported_api_count = report
         .imports

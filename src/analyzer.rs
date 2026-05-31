@@ -190,6 +190,7 @@ struct DetectedFormat {
 const MAX_STORED_STRINGS: usize = 20_000;
 const MAX_STRING_PREVIEW_CODE_UNITS: usize = 256;
 const MAX_STORED_ARCHIVE_ENTRIES: usize = 8_192;
+const HIGH_ENTROPY_THRESHOLD: f32 = 7.0;
 
 pub fn analyze_file(path: impl AsRef<Path>) -> Result<BinaryReport> {
     let path = path.as_ref().to_path_buf();
@@ -575,7 +576,11 @@ fn populate_pe_report(report: &mut BinaryReport, pe: &PE, buffer: &[u8]) -> Resu
     report.protection_findings = build_protection_findings(report, pe);
     populate_pe_resources(report, buffer);
 
-    if report.sections.iter().any(|section| section.entropy >= 7.2) {
+    if report
+        .sections
+        .iter()
+        .any(|section| section.entropy >= HIGH_ENTROPY_THRESHOLD)
+    {
         report.notes.push(
             "High-entropy section detected; packed or encrypted payload is possible.".to_string(),
         );
@@ -814,7 +819,7 @@ fn contains_any(haystack: &str, needles: &[&str]) -> bool {
     needles.iter().any(|needle| haystack.contains(needle))
 }
 
-fn bool_badge(value: bool) -> &'static str {
+pub fn bool_badge(value: bool) -> &'static str {
     if value {
         "Enabled"
     } else {
@@ -914,6 +919,8 @@ fn populate_elf_report(report: &mut BinaryReport, elf: &goblin::elf::Elf, buffer
     }
     .to_string();
 
+    report.section_count = elf.section_headers.len();
+
     report.sections = elf
         .section_headers
         .iter()
@@ -928,6 +935,22 @@ fn populate_elf_report(report: &mut BinaryReport, elf: &goblin::elf::Elf, buffer
             let raw_end = raw_start.saturating_add(section.sh_size as usize);
             let slice = buffer.get(raw_start..raw_end).unwrap_or(&[]);
 
+            let mut flags = Vec::new();
+            if section.sh_flags & u64::from(goblin::elf::section_header::SHF_EXECINSTR) != 0 {
+                flags.push("EXEC");
+            }
+            if section.sh_flags & u64::from(goblin::elf::section_header::SHF_WRITE) != 0 {
+                flags.push("WRITE");
+            }
+            if section.sh_flags & u64::from(goblin::elf::section_header::SHF_ALLOC) != 0 {
+                flags.push("ALLOC");
+            }
+            let flags_str = if flags.is_empty() {
+                format!("0x{:X}", section.sh_flags)
+            } else {
+                format!("0x{:X} [{}]", section.sh_flags, flags.join(" | "))
+            };
+
             SectionInfo {
                 name: if name.is_empty() {
                     format!("section_{index}")
@@ -938,7 +961,7 @@ fn populate_elf_report(report: &mut BinaryReport, elf: &goblin::elf::Elf, buffer
                 virtual_size: section.sh_size as u32,
                 raw_address: section.sh_offset as u32,
                 raw_size: section.sh_size as u32,
-                characteristics: format!("0x{:X}", section.sh_flags),
+                characteristics: flags_str,
                 entropy: shannon_entropy(slice),
             }
         })
@@ -953,7 +976,108 @@ fn populate_elf_report(report: &mut BinaryReport, elf: &goblin::elf::Elf, buffer
         })
         .collect();
 
-    report.optional_header = vec![
+    let mut dynsyms: Vec<String> = elf
+        .dynsyms
+        .iter()
+        .filter(|sym| sym.st_name != 0 && sym.st_value != 0)
+        .filter_map(|sym| elf.dynstrtab.get_at(sym.st_name).map(|s| s.to_string()))
+        .collect();
+    dynsyms.sort();
+    dynsyms.dedup();
+
+    let mut syms: Vec<String> = elf
+        .syms
+        .iter()
+        .filter(|sym| sym.st_name != 0 && sym.st_value != 0)
+        .filter_map(|sym| elf.strtab.get_at(sym.st_name).map(|s| s.to_string()))
+        .collect();
+    syms.sort();
+    syms.dedup();
+
+    if !dynsyms.is_empty() {
+        report.imports.push(ImportDll {
+            name: "[dynsym]".to_string(),
+            functions: dynsyms
+                .into_iter()
+                .map(|name| ImportFunction { name, ordinal: 0 })
+                .collect(),
+        });
+    }
+    if !syms.is_empty() {
+        report.imports.push(ImportDll {
+            name: "[symtab]".to_string(),
+            functions: syms
+                .into_iter()
+                .map(|name| ImportFunction { name, ordinal: 0 })
+                .collect(),
+        });
+    }
+
+    let mut program_rows: Vec<KeyValueRow> = Vec::new();
+    for ph in &elf.program_headers {
+        let type_name = match ph.p_type {
+            goblin::elf::program_header::PT_NULL => "PT_NULL",
+            goblin::elf::program_header::PT_LOAD => "PT_LOAD",
+            goblin::elf::program_header::PT_DYNAMIC => "PT_DYNAMIC",
+            goblin::elf::program_header::PT_INTERP => "PT_INTERP",
+            goblin::elf::program_header::PT_NOTE => "PT_NOTE",
+            goblin::elf::program_header::PT_SHLIB => "PT_SHLIB",
+            goblin::elf::program_header::PT_PHDR => "PT_PHDR",
+            goblin::elf::program_header::PT_TLS => "PT_TLS",
+            0x6474e550 => "PT_GNU_EH_FRAME",
+            0x6474e551 => "PT_GNU_STACK",
+            0x6474e552 => "PT_GNU_RELRO",
+            _ => "Other",
+        };
+        let mut perms = Vec::new();
+        if ph.p_flags & 0x4 != 0 {
+            perms.push("R");
+        }
+        if ph.p_flags & 0x2 != 0 {
+            perms.push("W");
+        }
+        if ph.p_flags & 0x1 != 0 {
+            perms.push("X");
+        }
+        program_rows.push(KeyValueRow {
+            key: type_name.to_string(),
+            value: format!(
+                "0x{:X} - 0x{:X} ({})",
+                ph.p_vaddr,
+                ph.p_vaddr + ph.p_memsz,
+                perms.join("")
+            ),
+        });
+    }
+
+    let dynamic_rows = elf
+        .dynamic
+        .as_ref()
+        .map(|d| {
+            d.dyns
+                .iter()
+                .filter_map(|entry| {
+                    let tag = match entry.d_tag {
+                        goblin::elf::dynamic::DT_NEEDED => Some("DT_NEEDED"),
+                        goblin::elf::dynamic::DT_SONAME => Some("DT_SONAME"),
+                        goblin::elf::dynamic::DT_RPATH => Some("DT_RPATH"),
+                        goblin::elf::dynamic::DT_RUNPATH => Some("DT_RUNPATH"),
+                        goblin::elf::dynamic::DT_INIT => Some("DT_INIT"),
+                        goblin::elf::dynamic::DT_FINI => Some("DT_FINI"),
+                        goblin::elf::dynamic::DT_INIT_ARRAY => Some("DT_INIT_ARRAY"),
+                        goblin::elf::dynamic::DT_FINI_ARRAY => Some("DT_FINI_ARRAY"),
+                        _ => None,
+                    };
+                    tag.map(|t| KeyValueRow {
+                        key: t.to_string(),
+                        value: format!("0x{:X}", entry.d_val),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let mut header_rows: Vec<KeyValueRow> = vec![
         KeyValueRow {
             key: "Machine".to_string(),
             value: format!("0x{:X}", elf.header.e_machine),
@@ -966,14 +1090,29 @@ fn populate_elf_report(report: &mut BinaryReport, elf: &goblin::elf::Elf, buffer
             key: "Type".to_string(),
             value: report.subsystem.clone(),
         },
+        KeyValueRow {
+            key: "OS/ABI".to_string(),
+            value: format!("0x{:X}", elf.header.e_ident[goblin::elf::header::EI_OSABI]),
+        },
+        KeyValueRow {
+            key: "Program Headers".to_string(),
+            value: elf.program_headers.len().to_string(),
+        },
+        KeyValueRow {
+            key: "Section Headers".to_string(),
+            value: elf.section_headers.len().to_string(),
+        },
     ];
+    header_rows.extend(program_rows);
+    header_rows.extend(dynamic_rows);
+    report.optional_header = header_rows;
 
     report.notes.push(
-        "ELF parsing is active; relocation and symbol detail can be extended next.".to_string(),
+        "ELF parsing includes sections, libraries, dynamic tags, and symbol tables.".to_string(),
     );
 }
 
-fn populate_mach_report(report: &mut BinaryReport, macho: &goblin::mach::MachO, _buffer: &[u8]) {
+fn populate_mach_report(report: &mut BinaryReport, macho: &goblin::mach::MachO, buffer: &[u8]) {
     report.format_name = "MACH".to_string();
     report.format_family = "Mach-O".to_string();
     report.detection_confidence = "Signature".to_string();
@@ -981,23 +1120,70 @@ fn populate_mach_report(report: &mut BinaryReport, macho: &goblin::mach::MachO, 
     report.entry_point = macho.entry;
     report.subsystem = "Mach-O Binary".to_string();
 
+    report.section_count = macho.segments.sections().flatten().count();
+
     report.sections = macho
         .segments
         .sections()
         .flatten()
         .filter_map(Result::ok)
-        .map(|(section, _)| SectionInfo {
-            name: section.name().unwrap_or("<unnamed>").to_string(),
-            virtual_address: section.addr as u32,
-            virtual_size: section.size as u32,
-            raw_address: section.offset,
-            raw_size: section.size as u32,
-            characteristics: format!("flags=0x{:X}", section.flags),
-            entropy: 0.0,
+        .map(|(section, _)| {
+            let start = section.offset as usize;
+            let len = section.size as usize;
+            let section_bytes = if start + len <= buffer.len() {
+                &buffer[start..start + len]
+            } else {
+                &[]
+            };
+            SectionInfo {
+                name: section.name().unwrap_or("<unnamed>").to_string(),
+                virtual_address: section.addr as u32,
+                virtual_size: section.size as u32,
+                raw_address: section.offset,
+                raw_size: section.size as u32,
+                characteristics: format!("flags=0x{:X}", section.flags),
+                entropy: shannon_entropy(section_bytes),
+            }
         })
         .collect();
 
-    report.optional_header = vec![
+    report.imports = macho
+        .libs
+        .iter()
+        .map(|lib| ImportDll {
+            name: lib.to_string(),
+            functions: Vec::new(),
+        })
+        .collect();
+
+    let mut load_commands: Vec<KeyValueRow> = Vec::new();
+    for cmd in macho.load_commands.iter() {
+        let cmd_name = match cmd.command.cmd() {
+            goblin::mach::load_command::LC_SEGMENT_64 => "LC_SEGMENT_64",
+            goblin::mach::load_command::LC_SEGMENT => "LC_SEGMENT",
+            goblin::mach::load_command::LC_SYMTAB => "LC_SYMTAB",
+            goblin::mach::load_command::LC_DYSYMTAB => "LC_DYSYMTAB",
+            goblin::mach::load_command::LC_LOAD_DYLIB => "LC_LOAD_DYLIB",
+            goblin::mach::load_command::LC_ID_DYLIB => "LC_ID_DYLIB",
+            goblin::mach::load_command::LC_LOAD_WEAK_DYLIB => "LC_LOAD_WEAK_DYLIB",
+            goblin::mach::load_command::LC_RPATH => "LC_RPATH",
+            goblin::mach::load_command::LC_MAIN => "LC_MAIN",
+            goblin::mach::load_command::LC_UUID => "LC_UUID",
+            goblin::mach::load_command::LC_CODE_SIGNATURE => "LC_CODE_SIGNATURE",
+            goblin::mach::load_command::LC_ENCRYPTION_INFO_64 => "LC_ENCRYPTION_INFO_64",
+            goblin::mach::load_command::LC_FUNCTION_STARTS => "LC_FUNCTION_STARTS",
+            goblin::mach::load_command::LC_DATA_IN_CODE => "LC_DATA_IN_CODE",
+            goblin::mach::load_command::LC_SOURCE_VERSION => "LC_SOURCE_VERSION",
+            goblin::mach::load_command::LC_BUILD_VERSION => "LC_BUILD_VERSION",
+            _ => "Other",
+        };
+        load_commands.push(KeyValueRow {
+            key: cmd_name.to_string(),
+            value: format!("offset=0x{:X}", cmd.offset),
+        });
+    }
+
+    let mut header_rows: Vec<KeyValueRow> = vec![
         KeyValueRow {
             key: "CPU".to_string(),
             value: format!("0x{:X}", macho.header.cputype),
@@ -1010,11 +1196,21 @@ fn populate_mach_report(report: &mut BinaryReport, macho: &goblin::mach::MachO, 
             key: "Entry".to_string(),
             value: format!("0x{:X}", macho.entry),
         },
+        KeyValueRow {
+            key: "Load Commands".to_string(),
+            value: macho.load_commands.len().to_string(),
+        },
+        KeyValueRow {
+            key: "Segments".to_string(),
+            value: macho.segments.len().to_string(),
+        },
     ];
+    header_rows.extend(load_commands);
+    report.optional_header = header_rows;
 
-    report
-        .notes
-        .push("Mach-O parsing is active; load command detail can be expanded next.".to_string());
+    report.notes.push(
+        "Mach-O parsing includes sections, load commands, and imported libraries.".to_string(),
+    );
 }
 
 fn detect_file_format(path: &Path, bytes: &[u8]) -> DetectedFormat {
@@ -1182,17 +1378,18 @@ fn is_macho_magic(bytes: &[u8]) -> bool {
 }
 
 fn is_zip_like(path: &Path, bytes: &[u8]) -> bool {
+    let has_magic = bytes.starts_with(b"PK\x03\x04")
+        || bytes.starts_with(b"PK\x05\x06")
+        || bytes.starts_with(b"PK\x07\x08");
     let ext = path
         .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or_default();
-    bytes.starts_with(b"PK\x03\x04")
-        || bytes.starts_with(b"PK\x05\x06")
-        || bytes.starts_with(b"PK\x07\x08")
-        || matches!(
-            ext.to_ascii_lowercase().as_str(),
-            "zip" | "apk" | "ipa" | "jar"
-        )
+    let has_ext = matches!(
+        ext.to_ascii_lowercase().as_str(),
+        "zip" | "apk" | "ipa" | "jar"
+    );
+    has_magic || has_ext
 }
 
 fn is_gzip(bytes: &[u8]) -> bool {
@@ -1363,6 +1560,7 @@ fn extract_strings(bytes: &[u8], min_len: usize) -> ExtractedStringsSummary {
     let mut summary = ExtractedStringsSummary::default();
     extract_ascii_strings(bytes, min_len, &mut summary);
     extract_utf16le_strings(bytes, min_len, &mut summary);
+    extract_utf16be_strings(bytes, min_len, &mut summary);
     summary.entries.sort_by_key(|item| item.offset);
     summary
 }
@@ -1421,6 +1619,34 @@ fn extract_utf16le_strings(bytes: &[u8], min_len: usize, summary: &mut Extracted
     }
 }
 
+fn extract_utf16be_strings(bytes: &[u8], min_len: usize, summary: &mut ExtractedStringsSummary) {
+    let mut idx = 0usize;
+
+    while idx + 1 < bytes.len() {
+        let start = idx;
+        let mut code_units = Vec::new();
+
+        while idx + 1 < bytes.len() {
+            let code_unit = u16::from_be_bytes([bytes[idx], bytes[idx + 1]]);
+            let ch = char::from_u32(code_unit as u32);
+            let printable = matches!(ch, Some(c) if !c.is_control());
+            if printable && bytes[idx] == 0 {
+                code_units.push(code_unit);
+                idx += 2;
+            } else {
+                break;
+            }
+        }
+
+        if code_units.len() >= min_len {
+            let (value, truncated) = preview_utf16_string(&code_units);
+            push_extracted_string(summary, "UTF-16BE", start, value, truncated);
+        }
+
+        idx = if idx == start { idx + 1 } else { idx };
+    }
+}
+
 fn push_extracted_string(
     summary: &mut ExtractedStringsSummary,
     kind: &'static str,
@@ -1430,7 +1656,7 @@ fn push_extracted_string(
 ) {
     match kind {
         "ASCII" => summary.ascii_count += 1,
-        "UTF-16LE" => summary.utf16_count += 1,
+        "UTF-16LE" | "UTF-16BE" => summary.utf16_count += 1,
         _ => {}
     }
 
@@ -1518,6 +1744,9 @@ fn build_protection_findings(report: &BinaryReport, pe: &PE) -> Vec<ProtectionFi
         "OutputDebugStringW",
         "GetTickCount",
         "QueryPerformanceCounter",
+        "NtSetInformationThread",
+        "GetTickCount64",
+        "TimeGetTime",
     ];
     let suspicious_apis = [
         "VirtualAlloc",
@@ -1527,8 +1756,33 @@ fn build_protection_findings(report: &BinaryReport, pe: &PE) -> Vec<ProtectionFi
         "LoadLibraryA",
         "LoadLibraryW",
         "GetProcAddress",
+        "NtCreateThreadEx",
+        "RtlCreateUserThread",
+        "QueueUserAPC",
+        "SetWindowsHookExA",
+        "SetWindowsHookExW",
+        "AdjustTokenPrivileges",
+        "OpenProcessToken",
     ];
-    let suspicious_sections = [".packed", "UPX0", "UPX1", ".enigma", ".aspack", ".themida"];
+    let suspicious_sections = [
+        ".packed",
+        "UPX0",
+        "UPX1",
+        "UPX2",
+        ".enigma",
+        ".aspack",
+        ".themida",
+        ".vmp0",
+        ".vmp1",
+        ".vmp2",
+        ".vmprotect",
+        ".ndata",
+        ".aspack",
+        ".adata",
+        ".nsp0",
+        ".nsp1",
+        ".packed2",
+    ];
 
     for api in anti_debug_apis {
         if report
@@ -1560,11 +1814,16 @@ fn build_protection_findings(report: &BinaryReport, pe: &PE) -> Vec<ProtectionFi
         }
     }
 
-    if report.sections.iter().any(|section| section.entropy > 7.0) {
+    if report
+        .sections
+        .iter()
+        .any(|section| section.entropy > HIGH_ENTROPY_THRESHOLD)
+    {
         findings.push(ProtectionFinding {
             title: "High entropy section".to_string(),
-            detail: "At least one section exceeds 7.0 entropy and may be packed or encrypted."
-                .to_string(),
+            detail: format!(
+                "At least one section exceeds {HIGH_ENTROPY_THRESHOLD} entropy and may be packed or encrypted."
+            ),
             severity: "high",
         });
     }
@@ -1602,6 +1861,47 @@ fn build_protection_findings(report: &BinaryReport, pe: &PE) -> Vec<ProtectionFi
                 report.protections.tls_callbacks
             ),
             severity: "medium",
+        });
+    }
+
+    if let Some(first) = report.sections.first() {
+        if first.entropy > HIGH_ENTROPY_THRESHOLD
+            && u64::from(first.virtual_address) == report.entry_point
+        {
+            findings.push(ProtectionFinding {
+                title: "Entry in high-entropy section".to_string(),
+                detail: "Entry point is in a high-entropy section, which may indicate packing."
+                    .to_string(),
+                severity: "high",
+            });
+        }
+    }
+
+    let high_entropy_count = report
+        .sections
+        .iter()
+        .filter(|s| s.entropy > HIGH_ENTROPY_THRESHOLD)
+        .count();
+    if high_entropy_count >= 2 {
+        findings.push(ProtectionFinding {
+            title: "Multiple high-entropy sections".to_string(),
+            detail: format!(
+                "{high_entropy_count} sections exceed {HIGH_ENTROPY_THRESHOLD} entropy."
+            ),
+            severity: "high",
+        });
+    }
+
+    let writable_executable = report
+        .sections
+        .iter()
+        .filter(|s| s.characteristics.contains("EXEC") && s.characteristics.contains("WRITE"))
+        .count();
+    if writable_executable > 0 {
+        findings.push(ProtectionFinding {
+            title: "Writable + executable section".to_string(),
+            detail: format!("{writable_executable} section(s) are both writable and executable."),
+            severity: "high",
         });
     }
 
@@ -1729,7 +2029,7 @@ fn repeating_xor_patterns(bytes: &[u8]) -> Vec<XorPattern> {
             })
             .collect();
 
-        local.sort_by(|a, b| b.count.cmp(&a.count));
+        local.sort_by_key(|b| std::cmp::Reverse(b.count));
         local.truncate(4);
         patterns.extend(local);
     }

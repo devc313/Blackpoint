@@ -1,7 +1,8 @@
-use crate::analyzer::{analyze_file, BinaryReport, KeyValueRow};
+use crate::analyzer::{analyze_file, bool_badge, BinaryReport, KeyValueRow};
 use crate::report_export::{default_snapshot_path, write_snapshot};
 use eframe::egui::{self, Color32, RichText, TextStyle, Ui};
 use egui_extras::{Column, TableBuilder};
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -67,6 +68,7 @@ struct ActiveReportState<'a> {
     hex_status: &'a mut Option<String>,
     hex_selected_offset: &'a mut usize,
     string_filter: &'a mut String,
+    import_filter: &'a mut String,
     strings_case_sensitive: &'a mut bool,
     show_ascii_strings: &'a mut bool,
     show_utf16_strings: &'a mut bool,
@@ -87,6 +89,7 @@ enum LandingAction {
 enum UiMessageTone {
     Info,
     Success,
+    Warning,
     Error,
 }
 
@@ -156,6 +159,7 @@ pub struct BlackpointApp {
     report: Option<BinaryReport>,
     last_error: Option<String>,
     string_filter: String,
+    import_filter: String,
     hex_offset_input: String,
     hex_rva_input: String,
     hex_status: Option<String>,
@@ -169,11 +173,15 @@ pub struct BlackpointApp {
     analyzing_path: Option<PathBuf>,
     recent_files: Vec<PathBuf>,
     ui_message: Option<UiMessage>,
+    history_path: PathBuf,
 }
 
 impl BlackpointApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         configure_theme(&cc.egui_ctx);
+
+        let history_path = dirs().join("history.json");
+        let recent_files = load_history(&history_path);
 
         Self {
             active_tab: ActiveTab::GeneralInfo,
@@ -182,6 +190,7 @@ impl BlackpointApp {
             report: None,
             last_error: None,
             string_filter: String::new(),
+            import_filter: String::new(),
             hex_offset_input: "0x0".to_string(),
             hex_rva_input: "0x0".to_string(),
             hex_status: None,
@@ -193,8 +202,9 @@ impl BlackpointApp {
             analysis_receiver: None,
             analyzing_since: None,
             analyzing_path: None,
-            recent_files: Vec::new(),
+            recent_files,
             ui_message: None,
+            history_path,
         }
     }
 
@@ -248,17 +258,29 @@ impl BlackpointApp {
     }
 
     fn reveal_target_in_explorer(&mut self, path: &Path) {
-        match Command::new("explorer")
-            .arg(format!("/select,{}", path.display()))
-            .spawn()
-        {
+        let result = if cfg!(target_os = "windows") {
+            Command::new("explorer")
+                .arg(format!("/select,{}", path.display()))
+                .spawn()
+        } else if cfg!(target_os = "macos") {
+            Command::new("open").arg("-R").arg(path).spawn()
+        } else {
+            Command::new("xdg-open")
+                .arg(path.parent().unwrap_or(path))
+                .spawn()
+        };
+
+        match result {
             Ok(_) => {
-                self.set_ui_message(UiMessageTone::Info, "Revealed active target in Explorer.");
+                self.set_ui_message(
+                    UiMessageTone::Info,
+                    "Revealed active target in file manager.",
+                );
             }
             Err(err) => {
                 self.set_ui_message(
                     UiMessageTone::Error,
-                    format!("Failed to reveal target in Explorer: {err}"),
+                    format!("Failed to reveal target in file manager: {err}"),
                 );
             }
         }
@@ -310,7 +332,32 @@ impl BlackpointApp {
     fn load_path(&mut self, path: PathBuf) {
         self.retry_path = Some(path.clone());
         match fs::metadata(&path) {
-            Ok(metadata) if metadata.is_file() => {}
+            Ok(metadata) if metadata.is_file() => {
+                let size = metadata.len();
+                const WARN_SIZE: u64 = 500 * 1024 * 1024;
+                const BLOCK_SIZE: u64 = 2 * 1024 * 1024 * 1024;
+                if size >= BLOCK_SIZE {
+                    self.analysis_receiver = None;
+                    self.analyzing_since = None;
+                    self.analyzing_path = None;
+                    self.drag_hovering = false;
+                    self.last_error = Some(format!(
+                        "{} is {:.1} MB which exceeds the 2 GB limit. Analysis is blocked for very large files.",
+                        path.display(),
+                        size as f64 / (1024.0 * 1024.0)
+                    ));
+                    return;
+                }
+                if size >= WARN_SIZE {
+                    self.set_ui_message(
+                        UiMessageTone::Warning,
+                        format!(
+                            "Large file ({:.1} MB). Analysis may be slow or use significant memory.",
+                            size as f64 / (1024.0 * 1024.0)
+                        ),
+                    );
+                }
+            }
             Ok(_) => {
                 self.analysis_receiver = None;
                 self.analyzing_since = None;
@@ -358,6 +405,7 @@ impl BlackpointApp {
 
     fn reset_transient_view_state(&mut self) {
         self.string_filter.clear();
+        self.import_filter.clear();
         self.strings_case_sensitive = false;
         self.show_ascii_strings = true;
         self.show_utf16_strings = true;
@@ -429,11 +477,65 @@ impl BlackpointApp {
     fn push_recent_file(&mut self, path: PathBuf) {
         self.recent_files.retain(|existing| existing != &path);
         self.recent_files.insert(0, path);
-        self.recent_files.truncate(6);
+        self.recent_files.truncate(50);
+        save_history(&self.history_path, &self.recent_files);
     }
 
     fn remove_recent_file(&mut self, path: &std::path::Path) {
         self.recent_files.retain(|existing| existing != path);
+        save_history(&self.history_path, &self.recent_files);
+    }
+
+    fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
+        let mut open_file = false;
+        let mut export_snap = false;
+        let mut copy_path = false;
+        let mut copy_h = false;
+
+        ctx.input(|input| {
+            if input.modifiers.ctrl && input.key_pressed(egui::Key::O) {
+                open_file = true;
+            }
+            if input.modifiers.ctrl && input.key_pressed(egui::Key::E) {
+                export_snap = true;
+            }
+            if input.modifiers.ctrl && input.key_pressed(egui::Key::C) && !input.modifiers.shift {
+                copy_path = true;
+            }
+            if input.modifiers.ctrl && input.key_pressed(egui::Key::C) && input.modifiers.shift {
+                copy_h = true;
+            }
+            for (key, tab) in [
+                (egui::Key::Num1, ActiveTab::GeneralInfo),
+                (egui::Key::Num2, ActiveTab::Resources),
+                (egui::Key::Num3, ActiveTab::Hex),
+                (egui::Key::Num4, ActiveTab::Sections),
+                (egui::Key::Num5, ActiveTab::Imports),
+                (egui::Key::Num6, ActiveTab::Exports),
+                (egui::Key::Num7, ActiveTab::Disassembly),
+                (egui::Key::Num8, ActiveTab::Strings),
+                (egui::Key::Num9, ActiveTab::Protection),
+            ] {
+                if input.key_pressed(key) && !input.modifiers.ctrl && !input.modifiers.alt {
+                    self.active_tab = tab;
+                }
+            }
+        });
+
+        if open_file {
+            self.pick_file();
+        }
+        if export_snap {
+            self.export_snapshot();
+        }
+        if copy_path {
+            if let Some(path) = self.loaded_file.clone() {
+                self.copy_target_path(ctx, &path);
+            }
+        }
+        if copy_h {
+            self.copy_hashes(ctx);
+        }
     }
 
     fn render_title_bar(&mut self, ctx: &egui::Context) {
@@ -642,6 +744,25 @@ impl BlackpointApp {
                                         }
                                     });
 
+                                    if let Some(report) = &self.report {
+                                        ui.add_space(6.0);
+                                        let size_text = if report.file_size >= 1024 * 1024 {
+                                            format!(
+                                                "{:.1} MB",
+                                                report.file_size as f64 / (1024.0 * 1024.0)
+                                            )
+                                        } else if report.file_size >= 1024 {
+                                            format!("{:.1} KB", report.file_size as f64 / 1024.0)
+                                        } else {
+                                            format!("{} B", report.file_size)
+                                        };
+                                        ui.label(
+                                            RichText::new(format!("Size: {size_text}"))
+                                                .small()
+                                                .color(t.muted),
+                                        );
+                                    }
+
                                     ui.add_space(10.0);
                                     ui.horizontal_wrapped(|ui| {
                                         if ghost_button(ui, "Copy Path").clicked() {
@@ -805,6 +926,7 @@ impl BlackpointApp {
                                                 hex_status: &mut self.hex_status,
                                                 hex_selected_offset: &mut self.hex_selected_offset,
                                                 string_filter: &mut self.string_filter,
+                                                import_filter: &mut self.import_filter,
                                                 strings_case_sensitive: &mut self
                                                     .strings_case_sensitive,
                                                 show_ascii_strings: &mut self.show_ascii_strings,
@@ -824,6 +946,7 @@ impl BlackpointApp {
                                             hex_status: &mut self.hex_status,
                                             hex_selected_offset: &mut self.hex_selected_offset,
                                             string_filter: &mut self.string_filter,
+                                            import_filter: &mut self.import_filter,
                                             strings_case_sensitive: &mut self
                                                 .strings_case_sensitive,
                                             show_ascii_strings: &mut self.show_ascii_strings,
@@ -861,6 +984,7 @@ impl BlackpointApp {
             let color = match message.tone {
                 UiMessageTone::Info => t.status,
                 UiMessageTone::Success => t.success,
+                UiMessageTone::Warning => t.warning,
                 UiMessageTone::Error => t.danger,
             };
             (message.text.as_str(), color)
@@ -999,12 +1123,20 @@ impl eframe::App for BlackpointApp {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
         self.handle_drag_and_drop(ctx);
+        self.handle_keyboard_shortcuts(ctx);
         self.render_title_bar(ctx);
         self.render_sidebar(ctx);
         self.render_main(ctx);
         self.render_status_bar(ctx);
         self.render_drag_overlay(ctx);
         self.render_analysis_overlay(ctx);
+
+        let nav_id = egui::Id::new("hex_nav_request");
+        if let Some(offset) = ctx.memory_mut(|m| m.data.remove_temp::<u32>(nav_id)) {
+            self.active_tab = ActiveTab::Hex;
+            self.hex_selected_offset = offset as usize;
+            self.hex_offset_input = format!("0x{:X}", offset);
+        }
     }
 }
 
@@ -1078,7 +1210,7 @@ fn render_active_report(
             state.hex_selected_offset,
         ),
         ActiveTab::Sections => render_sections(ui, report),
-        ActiveTab::Imports => render_imports(ui, report),
+        ActiveTab::Imports => render_imports(ui, report, state.import_filter),
         ActiveTab::Exports => render_exports(ui, report),
         ActiveTab::Disassembly => render_disassembly(ui, report),
         ActiveTab::Strings => render_strings(
@@ -2379,7 +2511,20 @@ fn render_sections(ui: &mut Ui, report: &BinaryReport) {
                     for section in &report.sections {
                         body.row(22.0, |mut row| {
                             row.col(|ui| {
-                                ui.monospace(&section.name);
+                                let name_response = ui.add(
+                                    egui::Button::new(RichText::new(&section.name).monospace())
+                                        .fill(Color32::TRANSPARENT)
+                                        .stroke(egui::Stroke::NONE),
+                                );
+                                if name_response.clicked() {
+                                    let nav_id = egui::Id::new("hex_nav_request");
+                                    ui.memory_mut(|m| {
+                                        m.data.insert_temp(nav_id, section.raw_address);
+                                    });
+                                }
+                                if name_response.hovered() {
+                                    name_response.on_hover_text("Click to view in Hex Viewer");
+                                }
                             });
                             row.col(|ui| {
                                 ui.monospace(format!("0x{:X}", section.virtual_address));
@@ -2406,7 +2551,7 @@ fn render_sections(ui: &mut Ui, report: &BinaryReport) {
     });
 }
 
-fn render_imports(ui: &mut Ui, report: &BinaryReport) {
+fn render_imports(ui: &mut Ui, report: &BinaryReport, filter: &mut String) {
     render_panel_title(
         ui,
         "Imports",
@@ -2464,23 +2609,59 @@ fn render_imports(ui: &mut Ui, report: &BinaryReport) {
             ),
         ],
     );
-    ui.add_space(12.0);
+    ui.add_space(8.0);
+
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new("Search:")
+                .small()
+                .color(Color32::from_rgb(151, 143, 135)),
+        );
+        ui.add(
+            egui::TextEdit::singleline(filter)
+                .hint_text("Filter DLLs or functions...")
+                .desired_width(260.0),
+        );
+        if ui.button(RichText::new("Clear").small()).clicked() {
+            filter.clear();
+        }
+    });
+    ui.add_space(8.0);
+
+    let filter_lower = filter.to_ascii_lowercase();
 
     framed_panel(ui, |ui| {
         section_surface(ui, |ui| {
             vertical_surface_scroll(ui, "imports_list_scroll", 560.0, |ui| {
                 for dll in &report.imports {
-                    egui::CollapsingHeader::new(format!("{} ({})", dll.name, dll.functions.len()))
-                        .default_open(dll.functions.len() <= 12)
+                    let dll_matches =
+                        filter.is_empty() || dll.name.to_ascii_lowercase().contains(&filter_lower);
+                    let matching_functions: Vec<_> = dll
+                        .functions
+                        .iter()
+                        .filter(|func| {
+                            filter.is_empty()
+                                || dll_matches
+                                || func.name.to_ascii_lowercase().contains(&filter_lower)
+                        })
+                        .collect();
+
+                    if matching_functions.is_empty() && !filter.is_empty() {
+                        continue;
+                    }
+
+                    let func_count = matching_functions.len();
+                    egui::CollapsingHeader::new(format!("{} ({})", dll.name, func_count))
+                        .default_open(func_count <= 12)
                         .show(ui, |ui| {
-                            if dll.functions.is_empty() {
+                            if matching_functions.is_empty() {
                                 ui.label(
                                     RichText::new("Container or library reference only")
                                         .small()
                                         .color(Color32::GRAY),
                                 );
                             }
-                            for function in &dll.functions {
+                            for function in &matching_functions {
                                 egui::Frame::new()
                                     .fill(Color32::from_rgb(9, 13, 18))
                                     .corner_radius(egui::CornerRadius::same(14))
@@ -2710,6 +2891,60 @@ fn render_strings(
                     .color(Color32::from_rgb(207, 94, 57)),
             );
         }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.button(RichText::new("Export CSV").small()).clicked() {
+                let report_clone = report.clone();
+                let filter_clone = string_filter.clone();
+                let case_clone = *case_sensitive;
+                let ascii_clone = *show_ascii;
+                let utf16_clone = *show_utf16;
+                std::thread::spawn(move || {
+                    let _filtered: Vec<_> = report_clone
+                        .strings
+                        .iter()
+                        .filter(|s| {
+                            if !ascii_clone && s.kind == "ASCII" {
+                                return false;
+                            }
+                            if !utf16_clone && s.kind.starts_with("UTF-16") {
+                                return false;
+                            }
+                            if !filter_clone.is_empty() {
+                                let matches = if case_clone {
+                                    s.value.contains(&filter_clone)
+                                } else {
+                                    s.value
+                                        .to_ascii_lowercase()
+                                        .contains(&filter_clone.to_ascii_lowercase())
+                                };
+                                if !matches {
+                                    return false;
+                                }
+                            }
+                            true
+                        })
+                        .collect();
+                    let default_path = crate::report_export::default_strings_path(&report_clone);
+                    let csv_path = default_path.with_extension("strings.csv");
+                    if let Err(err) =
+                        crate::report_export::write_strings_csv(&report_clone, &csv_path)
+                    {
+                        eprintln!("Failed to export CSV: {err}");
+                    }
+                });
+            }
+            if ui.button(RichText::new("Export TXT").small()).clicked() {
+                let report_clone = report.clone();
+                std::thread::spawn(move || {
+                    let default_path = crate::report_export::default_strings_path(&report_clone);
+                    if let Err(err) =
+                        crate::report_export::write_strings_txt(&report_clone, &default_path)
+                    {
+                        eprintln!("Failed to export TXT: {err}");
+                    }
+                });
+            }
+        });
     });
     ui.add_space(8.0);
 
@@ -3016,7 +3251,7 @@ fn format_hex_bytes(row: &[u8], row_size: usize) -> String {
         }
 
         if let Some(byte) = row.get(index) {
-            output.push_str(&format!("{byte:02X}"));
+            let _ = write!(&mut output, "{byte:02X}");
         } else {
             output.push_str("  ");
         }
@@ -3561,14 +3796,6 @@ fn overview_row(ui: &mut Ui, label: &str, value: &str) {
     ui.end_row();
 }
 
-fn bool_badge(value: bool) -> &'static str {
-    if value {
-        "Enabled"
-    } else {
-        "Disabled"
-    }
-}
-
 fn icon_tile(ui: &mut Ui, icon: AppIcon, accent: Color32, fill: Color32, size: f32) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
     ui.painter().rect(
@@ -4067,15 +4294,22 @@ fn titlebar_button(
 
 fn render_help_fab(ctx: &egui::Context) {
     let t = theme();
+    let about_open_id = egui::Id::new("about_dialog_open");
+
     egui::Area::new("help_fab".into())
-        // offset accounts for status bar (30px) + a small gap so FAB stays visible above it
         .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-20.0, -54.0))
         .show(ctx, |ui| {
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(52.0, 52.0), egui::Sense::hover());
+            let (rect, response) =
+                ui.allocate_exact_size(egui::vec2(52.0, 52.0), egui::Sense::click());
+            let bg = if response.hovered() {
+                t.panel
+            } else {
+                t.panel_alt
+            };
             ui.painter().rect(
                 rect,
                 26.0,
-                t.panel_alt,
+                bg,
                 egui::Stroke::new(1.0, t.border_soft),
                 egui::StrokeKind::Outside,
             );
@@ -4086,7 +4320,58 @@ fn render_help_fab(ctx: &egui::Context) {
                 t.title,
                 1.7,
             );
+            if response.clicked() {
+                let mut open = ctx
+                    .memory_mut(|m| m.data.get_persisted::<bool>(about_open_id).unwrap_or(false));
+                open = !open;
+                ctx.memory_mut(|m| m.data.insert_persisted(about_open_id, open));
+            }
         });
+
+    let about_open =
+        ctx.memory_mut(|m| m.data.get_persisted::<bool>(about_open_id).unwrap_or(false));
+    if about_open {
+        let mut open = true;
+        egui::Window::new("About Blackpoint")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+            .show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new("BLACKPOINT V2.4.0-STABLE")
+                            .strong()
+                            .size(18.0)
+                            .color(t.primary),
+                    );
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new("Static analysis workbench for reverse engineering, malware triage, and binary inspection.")
+                            .small()
+                            .color(t.muted),
+                    );
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.add_space(4.0);
+                    ui.label(RichText::new("Supported formats").strong().color(t.text));
+                    ui.label(
+                        RichText::new("PE, ELF, Mach-O, DEX, APK, IPA, JAR, ZIP, ISO9660, MS-DOS, COM, LE/LX, NPM, Amiga hunk, raw binary")
+                            .small()
+                            .color(t.muted),
+                    );
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("Built with Rust + eframe/egui").small().color(t.muted));
+                    ui.add_space(8.0);
+                    if ui.button("Close").clicked() {
+                        open = false;
+                    }
+                });
+            });
+        if !open {
+            ctx.memory_mut(|m| m.data.insert_persisted(about_open_id, false));
+        }
+    }
 }
 
 fn paint_icon(
@@ -4662,6 +4947,61 @@ fn paint_icon(
             );
         }
     }
+}
+
+fn dirs() -> PathBuf {
+    let base = std::env::var("APPDATA")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(base).join(".blackpoint")
+}
+
+fn load_history(path: &Path) -> Vec<PathBuf> {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json_like_parse(&content))
+        .unwrap_or_default()
+}
+
+fn save_history(path: &Path, entries: &[PathBuf]) {
+    let _ = fs::create_dir_all(path.parent().unwrap_or_else(|| Path::new(".")));
+    let json_array: Vec<String> = entries
+        .iter()
+        .map(|p| {
+            format!(
+                "\"{}\"",
+                p.display()
+                    .to_string()
+                    .replace('\\', "\\\\")
+                    .replace('"', "\\\"")
+            )
+        })
+        .collect();
+    let content = format!("[{}]", json_array.join(","));
+    let _ = fs::write(path, content.as_bytes());
+}
+
+fn serde_json_like_parse(content: &str) -> Option<Vec<PathBuf>> {
+    let trimmed = content.trim();
+    if !trimmed.starts_with('[') || !trimmed.ends_with(']') {
+        return None;
+    }
+    let inner = &trimmed[1..trimmed.len() - 1];
+    if inner.is_empty() {
+        return Some(Vec::new());
+    }
+    let mut paths = Vec::new();
+    for item in inner.split(',') {
+        let item = item
+            .trim()
+            .trim_matches('"')
+            .replace("\\\\", "\\")
+            .replace("\\\"", "\"");
+        if !item.is_empty() {
+            paths.push(PathBuf::from(item));
+        }
+    }
+    Some(paths)
 }
 
 #[cfg(test)]
