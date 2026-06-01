@@ -1,143 +1,161 @@
-# Blackpoint
+<div align="center">
 
-Blackpoint is a modern desktop binary analysis workbench built in Rust for reverse engineering, malware triage, and low-level executable inspection across PE, ELF, Mach-O, archives, and raw binaries.
+# ◼ Blackpoint
 
-It is designed as a native desktop workflow with custom window chrome, an OLED-inspired interface, async analysis, drag-and-drop loading, bounded-memory extraction paths, and a responsive layout that remains usable in both compact and full-size windows.
+**A native desktop binary analysis workbench — built in Rust.**
 
-## Highlights
+Reverse engineering, malware triage, and low-level executable inspection across PE, ELF, Mach-O, archives, and raw binaries. Zero dependencies on Python, Java, or external runtimes.
 
-- Native Rust desktop application built with `eframe/egui`
-- Custom dark UI with responsive panels, pixel-tight section surfaces, and explicit empty/error/loading states
-- Asynchronous analysis pipeline with animated `Analyzing...` overlay and in-place retry flow
-- Drag-and-drop file loading and custom title bar controls
-- Snapshot export workflow for portable JSON triage artifacts
-- Static triage workflow for executables, libraries, package archives, and mixed binary blobs
-- Fail-soft parsing for PE resources, archive enumeration, and entry-point disassembly so partial analysis still renders
+[![Build](https://img.shields.io/github/actions/workflow/status/devc313/Blackpoint/build.yml?branch=main&logo=githubactions&logoColor=white&label=Build&style=for-the-badge)](https://github.com/devc313/Blackpoint/actions)
+[![Release](https://img.shields.io/github/v/release/devc313/Blackpoint?style=for-the-badge&logo=rust&logoColor=white&color=DE5400)](https://github.com/devc313/Blackpoint/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/devc313/Blackpoint)
+[![Language](https://img.shields.io/badge/rust-1.83%2B-DEA584?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org)
+[![License](https://img.shields.io/github/license/devc313/Blackpoint?style=for-the-badge&color=22C55E)](https://github.com/devc313/Blackpoint/blob/main/LICENSE)
+
+</div>
+
+---
+
+## Overview
+
+Blackpoint is a single-binary desktop tool for static binary analysis. It provides a fast, keyboard-friendly interface for inspecting executables, libraries, archives, and blobs — without leaving the desktop or opening a browser.
+
+It is not a disassembler or debugger. Its scope is **static triage**: format identification, header parsing, hash computation, string extraction, import/export analysis, entropy measurement, and heuristic scoring. Think of it as a native, offline alternative to tools like PE-bear, CFF Explorer, or Detect-It-Easy — with a unified interface that handles more than just PE.
+
+---
 
 ## Supported Formats
 
-- PE
-- ELF
-- Mach-O
-- DEX
-- APK
-- IPA
-- JAR
-- ZIP
-- ISO9660
-- MS-DOS
-- COM
-- LE/LX
-- NPM package archives
-- Amiga hunk binaries
-- Generic binary fallback with heuristic detection
+| Category | Formats |
+|---|---|
+| **Native executables** | PE (x86/x64/ARM), ELF, Mach-O, MS-DOS, COM, LE/LX |
+| **Mobile / JVM** | DEX, APK, IPA, JAR |
+| **Archives** | ZIP, `.tgz`, ISO 9660, NPM package archives |
+| **Exotic** | Amiga Hunk binaries |
+| **Fallback** | Generic binary with heuristic detection |
 
-## Current Features
+---
 
-### General analysis
+## Features
 
-- File metadata and format identification
-- `MD5`, `SHA-1`, and `SHA-256`
-- Architecture, machine type, subsystem, image base, entry point, section count, and timestamp
-- Detection confidence and heuristic notes
+### Static Analysis Core
 
-### PE-focused inspection
+- File metadata, format identification, and detection confidence score
+- `MD5`, `SHA-1`, `SHA-256` hash computation
+- Architecture, machine type, subsystem, image base, entry point, section count, timestamp
 
-- DOS header
-- File header
-- Optional header
+### PE Inspection
+
+- DOS header, File header, Optional header
+- Section table with **entropy per section** and RWX permission flags
+- Imports grouped by DLL, with ordinal resolution
+- Exports with RVA and raw offset
 - Resource tree enumeration
-- Version information extraction
-- Application manifest extraction with execution-level and awareness hints
-- PE build signals such as overlay detection, debug directories, PDB path, CLR, bound import, delay import, and certificate-table presence
-- Section table with entropy and permission flags
-- Imports grouped by DLL with ordinal support
-- Exports with RVA and offset information
-- Mitigation and hardening signals such as `ASLR`, `DEP/NX`, `SEH`, and TLS callback presence
+- Version information and application manifest extraction (execution level, DPI awareness)
+- Build signals: overlay detection, debug directory, PDB path, CLR header, bound imports, delay imports, certificate table
+- Hardening signals: **ASLR**, **DEP/NX**, **SEH**, **CFG**, TLS callback presence
 
-### Content inspection
+### Content Inspection
 
-- ASCII and UTF-16LE string extraction
-- Search and filtering in the strings view with bounded visible-row rendering
-- Entry-point disassembly with Capstone
-- Raw hex viewer with raw offset jump, RVA jump, entry jump, section quick-jump, and virtual-only RVA fallback messaging
-- ZIP and `.tgz` archive member listing with stored-versus-total accounting
+- ASCII and UTF-16LE string extraction with search and live filtering
+- Entry-point disassembly via **Capstone**
+- Raw hex viewer with navigation: raw offset jump, RVA jump, entry jump, section quick-jump
 
-### Heuristics and triage
+### Heuristics & Triage
 
-- Protection findings and suspicious API indicators
-- Anti-debug oriented import heuristics
+- Suspicious API import detection (anti-debug, injection, credential access patterns)
 - Single-byte XOR candidate discovery
-- Common-key XOR previews
+- Common-key XOR preview
 - Repeating multi-byte XOR pattern detection
+- Protection findings surface
 
-### Workflow quality
+### Workflow
 
-- Recent target list in the sidebar
-- Copy-path, copy-hashes, Explorer reveal, and JSON snapshot export actions for the active target
-- Dedicated `Resources` surface for PE metadata
-- Responsive layout for compact and wide desktop windows
-- Memory-bounded string and archive previews to avoid pathological UI allocations on large inputs
-- Status-bar feedback for copy/export actions and other non-analysis workflows
-- CI verification with `cargo fmt`, `cargo clippy -D warnings`, `cargo test`, and release builds
+- Drag-and-drop file loading
+- Recent target list in sidebar
+- Copy-path and open-folder actions for active target
+- Asynchronous analysis pipeline — UI never blocks
+- Responsive layout across compact and full-size windows
 
-## Tech Stack
+---
 
-- Rust
-- `eframe`
-- `egui`
-- `egui_extras`
-- `goblin`
-- `pelite`
-- `capstone`
-- `zip`
-- `tar`
-- `flate2`
+## UI
+
+Custom frameless window with OLED-inspired dark surface system. Designed for extended use on high-contrast monitors. Scroll-first behavior at smaller window sizes prevents clipping.
+
+No Electron. No web view. Native OpenGL rendering via `egui_glow`.
+
+---
 
 ## Getting Started
 
-### Run
+**Requirements:** Rust stable 1.83+, Cargo
 
 ```bash
+git clone https://github.com/devc313/Blackpoint
+cd Blackpoint
+
+# Development
 cargo run
-```
 
-### Debug build
-
-```bash
-cargo build
-```
-
-### Release build
-
-```bash
+# Release binary
 cargo build --release
+# → target/release/blackpoint
 ```
 
-### Verification
+No additional setup. The binary is self-contained.
 
-```bash
-cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-targets --all-features
-```
+---
 
-## UI Notes
+## Tech Stack
 
-- Custom title bar and window controls
-- OLED-style dark surface system
-- Responsive layout for compact and wide window sizes
-- Scroll-first behavior for smaller windows instead of clipping
-- Dedicated resource/version/manifest view for PE targets
+| Layer | Crate |
+|---|---|
+| GUI framework | `eframe` + `egui` + `egui_extras` |
+| Rendering | `egui_glow` (OpenGL) |
+| PE parsing | `pelite` |
+| Multi-format parsing | `goblin` (ELF, Mach-O, PE, archive) |
+| Disassembly | `capstone` |
+| Archive handling | `zip`, `tar`, `flate2` |
+
+No runtime dependencies outside these crates and the standard library.
+
+---
 
 ## Roadmap
 
-- Code cave analysis and richer TLS callback detail
-- Richer ELF and Mach-O symbol and loader views
-- Heuristic scoring for packers, injectors, and suspicious loaders
-- Copy/export actions for strings and richer artifact bundles
-- Persisted session history
+- [ ] RVA ↔ raw offset translation with section-aware hex navigation
+- [ ] Code cave detection and richer TLS callback detail
+- [ ] Richer ELF symbol and dynamic segment views
+- [ ] Richer Mach-O load command and dylib views
+- [ ] Heuristic packer/injector scoring
+- [ ] Copy/export actions for strings, hashes, section data
+- [ ] YARA rule evaluation against loaded targets
+- [ ] Localization (EN, TR, DE)
 
-## Repository
+---
 
-Prepared for GitHub publishing under [devc313](https://github.com/devc313).
+## Contributing
+
+```bash
+# Before opening a PR:
+cargo fmt
+cargo clippy -- -D warnings
+cargo test
+```
+
+Keep analysis modules (`scanner`, `parser`, `heuristics`) independent of the GUI layer. No cross-module state sharing through globals.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+> **Disclaimer:** Blackpoint is intended for analysis of binaries you own or have explicit authorization to inspect. Use responsibly and in compliance with applicable laws.
+
+---
+
+<div align="center">
+Built by <a href="https://github.com/devc313">devc313</a>
+</div>
