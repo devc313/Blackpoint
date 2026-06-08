@@ -103,6 +103,47 @@ const APP_VERSION: &str = "BLACKPOINT V2.4.0-STABLE";
 const CANVAS_MAX_WIDTH: f32 = 1480.0;
 const MAX_VISIBLE_STRING_ROWS: usize = 100;
 
+// ── Design tokens ──────────────────────────────────────────────────────────
+// Single source of truth for the visual rhythm. Every font size, corner radius,
+// and gap routes through one of these steps so nested surfaces stay aligned and
+// the type hierarchy reads cleanly. Do not introduce ad-hoc literals at call
+// sites — pick the nearest token instead.
+
+// Type scale (pt). Each step is a distinct semantic role.
+const FONT_CAPTION: f32 = 10.5; // status bar, badges, meta, uppercase labels
+const FONT_SMALL: f32 = 12.0; // secondary labels, subtitles, key column
+const FONT_BODY: f32 = 13.5; // body text and button labels
+const FONT_LABEL: f32 = 15.0; // card titles
+const FONT_H3: f32 = 17.0; // section / brand headers
+const FONT_H2: f32 = 20.0; // metric values, panel titles
+const FONT_H1: f32 = 28.0; // hero file name
+
+// Corner radius scale. Nesting rule: inner surface uses a smaller step than the
+// surface that contains it, which keeps concentric cards visually settled.
+const RADIUS_SM: u8 = 10; // pills, chips, inset boxes, inputs, tight controls
+const RADIUS_MD: u8 = 14; // buttons, avatar, control clusters, metric tiles
+const RADIUS_LG: u8 = 18; // cards
+const RADIUS_XL: u8 = 24; // panels, overlays, hero/landing surfaces, window
+
+// Spacing scale (4px grid) for `add_space`.
+const GAP_XS: f32 = 4.0;
+const GAP_SM: f32 = 8.0;
+const GAP_MD: f32 = 12.0;
+const GAP_LG: f32 = 16.0;
+
+// Padding scale (i8) for uniform frame inner margins.
+// PAD_MD for nested / content cards, PAD_LG for top-level panels and surfaces.
+const PAD_MD: i8 = 12;
+const PAD_LG: i8 = 16;
+
+// Data-accent palette. Four distinguishable hues used to tint metric tiles and
+// section headers. All sit in the warm half of the wheel (gold/green/copper/rose)
+// so they read as a family with the orange brand instead of fighting it.
+const ACCENT_GOLD: Color32 = Color32::from_rgb(226, 178, 92);
+const ACCENT_SAGE: Color32 = Color32::from_rgb(146, 178, 112);
+const ACCENT_COPPER: Color32 = Color32::from_rgb(222, 124, 66);
+const ACCENT_ROSE: Color32 = Color32::from_rgb(212, 124, 132);
+
 #[derive(Clone, Copy)]
 struct UiTheme {
     app_bg: Color32,
@@ -140,12 +181,12 @@ fn theme() -> UiTheme {
         text: Color32::from_rgb(230, 225, 220),
         title: Color32::from_rgb(250, 246, 242),
         muted: Color32::from_rgb(151, 143, 135),
-        status: Color32::from_rgb(118, 131, 164),
+        status: Color32::from_rgb(150, 134, 116),
         primary: Color32::from_rgb(231, 126, 35),
         primary_soft: Color32::from_rgb(74, 46, 23),
         primary_border: Color32::from_rgb(140, 82, 32),
         primary_text: Color32::from_rgb(24, 18, 14),
-        info: Color32::from_rgb(96, 150, 235),
+        info: Color32::from_rgb(208, 126, 150),
         success: Color32::from_rgb(82, 200, 126),
         warning: Color32::from_rgb(224, 154, 76),
         danger: Color32::from_rgb(214, 92, 92),
@@ -558,18 +599,18 @@ impl BlackpointApp {
 
                 ui.horizontal(|ui| {
                     icon_tile(ui, AppIcon::Terminal, t.primary, t.primary_soft, 34.0);
-                    ui.add_space(10.0);
+                    ui.add_space(GAP_MD);
                     ui.vertical(|ui| {
                         ui.label(
                             RichText::new("Blackpoint")
-                                .size(17.0)
+                                .size(FONT_H3)
                                 .strong()
                                 .color(t.title),
                         );
                         if ui.available_width() > 320.0 {
                             ui.label(
                                 RichText::new("Static analysis workbench")
-                                    .size(10.5)
+                                    .size(FONT_CAPTION)
                                     .color(t.muted),
                             );
                         }
@@ -578,7 +619,7 @@ impl BlackpointApp {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         egui::Frame::new()
                             .fill(t.primary_soft)
-                            .corner_radius(egui::CornerRadius::same(16))
+                            .corner_radius(egui::CornerRadius::same(RADIUS_MD))
                             .stroke(egui::Stroke::new(1.0, t.primary_border))
                             .inner_margin(egui::Margin::same(4))
                             .show(ui, |ui| {
@@ -596,15 +637,14 @@ impl BlackpointApp {
                                     response.0.shrink2(egui::vec2(6.0, 6.0)),
                                     AppIcon::User,
                                     t.primary_text,
-                                    1.6,
                                 );
                             });
-                        ui.add_space(12.0);
+                        ui.add_space(GAP_MD);
                         ui.separator();
-                        ui.add_space(12.0);
+                        ui.add_space(GAP_MD);
                         egui::Frame::new()
                             .fill(t.panel_alt)
-                            .corner_radius(egui::CornerRadius::same(14))
+                            .corner_radius(egui::CornerRadius::same(RADIUS_MD))
                             .stroke(egui::Stroke::new(1.0, t.border_soft))
                             .inner_margin(egui::Margin::symmetric(6, 6))
                             .show(ui, |ui| {
@@ -679,7 +719,7 @@ impl BlackpointApp {
 
                         sidebar_section_label(ui, "Analysis Session");
                         status_chip(ui, "Workspace: Active", t.primary);
-                        ui.add_space(12.0);
+                        ui.add_space(GAP_MD);
 
                         if primary_button(ui, "Open Binary / Archive", Some(AppIcon::FileOpen))
                             .clicked()
@@ -693,28 +733,28 @@ impl BlackpointApp {
                             let mut reveal_clicked = false;
                             let mut copy_hashes_clicked = false;
                             let mut export_snapshot_clicked = false;
-                            ui.add_space(14.0);
+                            ui.add_space(GAP_LG);
                             egui::Frame::new()
                                 .fill(t.panel)
-                                .corner_radius(egui::CornerRadius::same(18))
+                                .corner_radius(egui::CornerRadius::same(RADIUS_LG))
                                 .stroke(egui::Stroke::new(1.0, t.border_soft))
-                                .inner_margin(egui::Margin::same(14))
+                                .inner_margin(egui::Margin::same(PAD_MD))
                                 .show(ui, |ui| {
                                     ui.label(RichText::new("Active Target").small().color(t.muted));
-                                    ui.add_space(6.0);
+                                    ui.add_space(GAP_SM);
                                     let file_name = path
                                         .file_name()
                                         .and_then(|name| name.to_str())
                                         .unwrap_or("Loaded target");
                                     ui.label(
-                                        RichText::new(file_name).strong().size(19.0).color(t.title),
+                                        RichText::new(file_name).strong().size(FONT_H2).color(t.title),
                                     );
 
                                     if !compact_sidebar {
-                                        ui.add_space(8.0);
+                                        ui.add_space(GAP_SM);
                                         egui::Frame::new()
                                             .fill(t.inset)
-                                            .corner_radius(egui::CornerRadius::same(14))
+                                            .corner_radius(egui::CornerRadius::same(RADIUS_MD))
                                             .stroke(egui::Stroke::new(1.0, t.border_soft))
                                             .inner_margin(egui::Margin::symmetric(12, 10))
                                             .show(ui, |ui| {
@@ -730,7 +770,7 @@ impl BlackpointApp {
                                             });
                                     }
 
-                                    ui.add_space(10.0);
+                                    ui.add_space(GAP_MD);
                                     ui.horizontal_wrapped(|ui| {
                                         if let Some(report) = &self.report {
                                             sidebar_pill(ui, &report.format_name);
@@ -745,7 +785,7 @@ impl BlackpointApp {
                                     });
 
                                     if let Some(report) = &self.report {
-                                        ui.add_space(6.0);
+                                        ui.add_space(GAP_SM);
                                         let size_text = if report.file_size >= 1024 * 1024 {
                                             format!(
                                                 "{:.1} MB",
@@ -763,7 +803,7 @@ impl BlackpointApp {
                                         );
                                     }
 
-                                    ui.add_space(10.0);
+                                    ui.add_space(GAP_MD);
                                     ui.horizontal_wrapped(|ui| {
                                         if ghost_button(ui, "Copy Path").clicked() {
                                             copy_path_clicked = true;
@@ -797,12 +837,12 @@ impl BlackpointApp {
                         }
 
                         if let Some(error) = &self.last_error {
-                            ui.add_space(14.0);
+                            ui.add_space(GAP_LG);
                             egui::Frame::new()
                                 .fill(Color32::from_rgb(52, 24, 22))
-                                .corner_radius(egui::CornerRadius::same(16))
+                                .corner_radius(egui::CornerRadius::same(RADIUS_LG))
                                 .stroke(egui::Stroke::new(1.0, t.danger))
-                                .inner_margin(egui::Margin::same(12))
+                                .inner_margin(egui::Margin::same(PAD_MD))
                                 .show(ui, |ui| {
                                     ui.label(
                                         RichText::new(error)
@@ -812,7 +852,7 @@ impl BlackpointApp {
                                 });
                         }
 
-                        ui.add_space(16.0);
+                        ui.add_space(GAP_LG);
                         sidebar_section_label(ui, "Navigation");
                         for tab in [
                             ActiveTab::GeneralInfo,
@@ -835,7 +875,7 @@ impl BlackpointApp {
                         }
 
                         if !self.recent_files.is_empty() {
-                            ui.add_space(18.0);
+                            ui.add_space(GAP_LG);
                             sidebar_section_label(ui, "Recent");
                             let mut reopened_path = None;
                             for path in &self.recent_files {
@@ -864,7 +904,7 @@ impl BlackpointApp {
             .frame(
                 egui::Frame::new()
                     .fill(t.app_bg)
-                    .inner_margin(egui::Margin::same(16)),
+                    .inner_margin(egui::Margin::same(PAD_LG)),
             )
             .show(ctx, |ui| {
                 if self.report.is_none() {
@@ -1002,18 +1042,18 @@ impl BlackpointApp {
                 ui.horizontal(|ui| {
                     let response =
                         ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
-                    paint_icon(ui.painter(), response.0, status_icon, t.primary, 1.5);
-                    ui.label(RichText::new(engine_status).size(10.5).color(t.text));
+                    paint_icon(ui.painter(), response.0, status_icon, t.primary);
+                    ui.label(RichText::new(engine_status).size(FONT_CAPTION).color(t.text));
                     ui.separator();
-                    ui.label(RichText::new(target_status).size(10.0).color(t.status));
+                    ui.label(RichText::new(target_status).size(FONT_CAPTION).color(t.status));
                     if let Some((message, color)) = active_message {
                         ui.separator();
-                        ui.label(RichText::new(message).size(10.0).color(color));
+                        ui.label(RichText::new(message).size(FONT_CAPTION).color(color));
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
                             RichText::new(APP_VERSION)
-                                .size(10.0)
+                                .size(FONT_CAPTION)
                                 .strong()
                                 .color(t.status),
                         );
@@ -1027,6 +1067,7 @@ impl BlackpointApp {
             return;
         }
 
+        let t = theme();
         let layer_id = egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop_overlay"));
         let painter = ctx.layer_painter(layer_id);
         let rect = ctx.content_rect();
@@ -1035,9 +1076,9 @@ impl BlackpointApp {
         let card = egui::Rect::from_center_size(rect.center(), egui::vec2(420.0, 180.0));
         painter.rect(
             card,
-            30.0,
-            Color32::from_rgba_unmultiplied(14, 19, 26, 240),
-            egui::Stroke::new(2.0, Color32::from_rgb(207, 94, 57)),
+            RADIUS_XL as f32,
+            Color32::from_rgba_unmultiplied(26, 20, 17, 240),
+            egui::Stroke::new(2.0, t.primary),
             egui::StrokeKind::Outside,
         );
         painter.text(
@@ -1045,14 +1086,14 @@ impl BlackpointApp {
             egui::Align2::CENTER_TOP,
             "Drop target to analyze",
             egui::FontId::proportional(24.0),
-            Color32::from_rgb(245, 245, 246),
+            t.title,
         );
         painter.text(
             card.center_top() + egui::vec2(0.0, 86.0),
             egui::Align2::CENTER_TOP,
             "PE  ELF  MACH  ZIP  TGZ",
             egui::FontId::monospace(16.0),
-            Color32::from_rgb(124, 134, 147),
+            t.muted,
         );
     }
 
@@ -1060,6 +1101,7 @@ impl BlackpointApp {
         let Some(started) = self.analyzing_since else {
             return;
         };
+        let t = theme();
 
         let elapsed = started.elapsed().as_secs_f32();
         let dots = match ((elapsed * 2.0) as usize) % 4 {
@@ -1080,10 +1122,10 @@ impl BlackpointApp {
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 egui::Frame::new()
-                    .fill(Color32::from_rgb(11, 15, 20))
-                    .corner_radius(egui::CornerRadius::same(28))
-                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(76, 90, 111)))
-                    .inner_margin(egui::Margin::same(22))
+                    .fill(t.inset)
+                    .corner_radius(egui::CornerRadius::same(RADIUS_XL))
+                    .stroke(egui::Stroke::new(1.0, t.border))
+                    .inner_margin(egui::Margin::same(PAD_LG))
                     .show(ui, |ui| {
                         ui.set_width(440.0);
                         ui.horizontal(|ui| {
@@ -1092,21 +1134,21 @@ impl BlackpointApp {
                                 ui.label(
                                     RichText::new(format!("Analyzing{dots}"))
                                         .strong()
-                                        .size(22.0)
-                                        .color(Color32::from_rgb(244, 245, 247)),
+                                        .size(FONT_H2)
+                                        .color(t.title),
                                 );
                                 if let Some(path) = &self.analyzing_path {
                                     ui.label(
                                         RichText::new(path.display().to_string())
                                             .small()
                                             .monospace()
-                                            .color(Color32::from_rgb(142, 151, 163)),
+                                            .color(t.muted),
                                     );
                                 }
                                 ui.label(
                                     RichText::new("Parsing headers, strings, imports, heuristics, and XOR candidates")
                                         .small()
-                                        .color(Color32::from_rgb(162, 172, 184)),
+                                        .color(t.muted),
                                 );
                             });
                         });
@@ -1164,10 +1206,10 @@ fn configure_theme(ctx: &egui::Context) {
     style.visuals.widgets.open.bg_fill = t.panel;
     style.visuals.widgets.open.bg_stroke = egui::Stroke::new(1.0, t.border);
     style.visuals.window_stroke = egui::Stroke::new(1.0, t.border);
-    style.visuals.window_corner_radius = egui::CornerRadius::same(26);
+    style.visuals.window_corner_radius = egui::CornerRadius::same(RADIUS_XL);
     style.spacing.item_spacing = egui::vec2(12.0, 12.0);
     style.spacing.button_padding = egui::vec2(16.0, 10.0);
-    style.spacing.window_margin = egui::Margin::same(16);
+    style.spacing.window_margin = egui::Margin::same(PAD_LG);
     ctx.set_style(style);
 }
 
@@ -1183,9 +1225,9 @@ fn render_report_shell(
         ui.set_width(canvas_width);
         egui::Frame::new()
             .fill(t.shell_bg)
-            .corner_radius(egui::CornerRadius::same(28))
+            .corner_radius(egui::CornerRadius::same(RADIUS_XL))
             .stroke(egui::Stroke::new(1.0, t.border))
-            .inner_margin(egui::Margin::same(20))
+            .inner_margin(egui::Margin::same(PAD_LG))
             .show(ui, |ui| {
                 render_active_report(ui, active_tab, report, state);
             });
@@ -1284,7 +1326,7 @@ fn render_empty_state(ui: &mut Ui) -> bool {
             egui::Frame::new()
                 .fill(t.panel)
                 .stroke(egui::Stroke::new(1.0, t.border_soft))
-                .corner_radius(egui::CornerRadius::same(28))
+                .corner_radius(egui::CornerRadius::same(RADIUS_XL))
                 .inner_margin(egui::Margin::same(if compact { 22 } else { 26 }))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
@@ -1305,7 +1347,7 @@ fn render_empty_state(ui: &mut Ui) -> bool {
                                 .strong()
                                 .color(t.title),
                         );
-                        ui.add_space(4.0);
+                        ui.add_space(GAP_XS);
                         ui.set_max_width(if compact { 480.0 } else { 560.0 });
                         ui.label(
                             RichText::new("Drop a binary, archive, or raw blob to start analysis.\nSupports PE, ELF, Mach-O, ZIP/APK/JAR, tgz/npm, ISO images, and generic byte buffers.")
@@ -1327,7 +1369,7 @@ fn render_empty_state(ui: &mut Ui) -> bool {
     );
     draw_dashed_border(ui, hero_response.response.rect.shrink(6.0), t.dashed_border);
 
-    ui.add_space(10.0);
+    ui.add_space(GAP_MD);
     if width >= 1260.0 {
         ui.allocate_ui_with_layout(
             egui::vec2(width, 174.0),
@@ -1370,7 +1412,7 @@ fn render_empty_state(ui: &mut Ui) -> bool {
                         cards[1].4,
                     );
                 });
-                ui.add_space(10.0);
+                ui.add_space(GAP_MD);
                 ui.columns(2, |columns| {
                     capability_card(
                         &mut columns[0],
@@ -1394,7 +1436,7 @@ fn render_empty_state(ui: &mut Ui) -> bool {
     } else {
         for card in cards {
             capability_card(ui, card.0, card.1, card.2, card.3, card.4);
-            ui.add_space(12.0);
+            ui.add_space(GAP_MD);
         }
     }
 
@@ -1414,12 +1456,12 @@ fn render_error_state(ui: &mut Ui, error: &str, can_retry: bool) -> LandingActio
             egui::Frame::new()
                 .fill(t.panel)
                 .stroke(egui::Stroke::new(1.0, t.danger))
-                .corner_radius(egui::CornerRadius::same(28))
+                .corner_radius(egui::CornerRadius::same(RADIUS_XL))
                 .inner_margin(egui::Margin::same(if compact { 22 } else { 26 }))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.vertical_centered(|ui| {
-                        ui.add_space(6.0);
+                        ui.add_space(GAP_SM);
                         icon_tile(
                             ui,
                             AppIcon::Info,
@@ -1427,14 +1469,14 @@ fn render_error_state(ui: &mut Ui, error: &str, can_retry: bool) -> LandingActio
                             t.panel_alt,
                             if compact { 56.0 } else { 62.0 },
                         );
-                        ui.add_space(12.0);
+                        ui.add_space(GAP_MD);
                         ui.label(
                             RichText::new("Analysis failed before report generation")
                                 .size(if compact { 18.0 } else { 21.0 })
                                 .strong()
                                 .color(t.title),
                         );
-                        ui.add_space(6.0);
+                        ui.add_space(GAP_SM);
                         ui.label(
                             RichText::new(
                                 "The parser hit a fatal edge-case. Choose another target or retry after correcting the input file.",
@@ -1442,12 +1484,12 @@ fn render_error_state(ui: &mut Ui, error: &str, can_retry: bool) -> LandingActio
                             .size(if compact { 12.8 } else { 13.4 })
                             .color(t.status),
                         );
-                        ui.add_space(14.0);
+                        ui.add_space(GAP_LG);
                         egui::Frame::new()
                             .fill(t.inset)
-                            .corner_radius(egui::CornerRadius::same(18))
+                            .corner_radius(egui::CornerRadius::same(RADIUS_LG))
                             .stroke(egui::Stroke::new(1.0, t.border_soft))
-                            .inner_margin(egui::Margin::same(14))
+                            .inner_margin(egui::Margin::same(PAD_MD))
                             .show(ui, |ui| {
                                 ui.set_max_width(if compact { 520.0 } else { 620.0 });
                                 ui.add(
@@ -1460,7 +1502,7 @@ fn render_error_state(ui: &mut Ui, error: &str, can_retry: bool) -> LandingActio
                                     .wrap(),
                                 );
                             });
-                        ui.add_space(16.0);
+                        ui.add_space(GAP_LG);
                         ui.horizontal_wrapped(|ui| {
                             if can_retry
                                 && secondary_button_sized(
@@ -1582,10 +1624,10 @@ fn render_overview(ui: &mut Ui, report: &BinaryReport) {
         render_overview_identity(ui, report, file_name, architecture);
     });
 
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
     render_overview_snapshot(ui, report, imported_api_count);
 
-    ui.add_space(14.0);
+    ui.add_space(GAP_LG);
     if width >= 980.0 {
         ui.columns(2, |columns| {
             framed_panel(&mut columns[0], |ui| {
@@ -1600,13 +1642,13 @@ fn render_overview(ui: &mut Ui, report: &BinaryReport) {
         framed_panel(ui, |ui| {
             render_overview_rows(ui, "Binary Profile", &profile_rows);
         });
-        ui.add_space(14.0);
+        ui.add_space(GAP_LG);
         framed_panel(ui, |ui| {
             render_overview_rows(ui, "Execution Layout", &layout_rows);
         });
     }
 
-    ui.add_space(14.0);
+    ui.add_space(GAP_LG);
     if width >= 980.0 {
         ui.columns(2, |columns| {
             framed_panel(&mut columns[0], |ui| {
@@ -1621,7 +1663,7 @@ fn render_overview(ui: &mut Ui, report: &BinaryReport) {
         framed_panel(ui, |ui| {
             render_overview_rows(ui, "Hashes", &hash_rows);
         });
-        ui.add_space(14.0);
+        ui.add_space(GAP_LG);
         framed_panel(ui, |ui| {
             render_notes_panel(ui, &report.notes);
         });
@@ -1631,7 +1673,7 @@ fn render_overview(ui: &mut Ui, report: &BinaryReport) {
 fn render_overview_rows(ui: &mut Ui, title: &str, rows: &[(String, String)]) {
     let t = theme();
     ui.label(RichText::new(title).strong().color(t.title));
-    ui.add_space(8.0);
+    ui.add_space(GAP_SM);
     egui::Grid::new(title)
         .num_columns(2)
         .min_col_width(if ui.available_width() >= 480.0 {
@@ -1654,14 +1696,14 @@ fn render_overview_identity(
     architecture: &str,
 ) {
     let t = theme();
-    ui.label(RichText::new(file_name).size(28.0).strong().color(t.title));
-    ui.add_space(4.0);
+    ui.label(RichText::new(file_name).size(FONT_H1).strong().color(t.title));
+    ui.add_space(GAP_XS);
 
     egui::Frame::new()
         .fill(t.inset)
-        .corner_radius(egui::CornerRadius::same(18))
+        .corner_radius(egui::CornerRadius::same(RADIUS_LG))
         .stroke(egui::Stroke::new(1.0, t.border_soft))
-        .inner_margin(egui::Margin::same(12))
+        .inner_margin(egui::Margin::same(PAD_MD))
         .show(ui, |ui| {
             ui.add(
                 egui::Label::new(
@@ -1674,14 +1716,14 @@ fn render_overview_identity(
             );
         });
 
-    ui.add_space(10.0);
+    ui.add_space(GAP_MD);
     ui.horizontal_wrapped(|ui| {
         pill(ui, &report.format_name);
         pill(ui, architecture);
         pill(ui, report.subsystem.as_str());
     });
 
-    ui.add_space(14.0);
+    ui.add_space(GAP_LG);
     ui.horizontal_wrapped(|ui| {
         inline_fact(ui, "Machine", &report.machine_type);
         inline_fact(ui, "Entry", &format!("0x{:X}", report.entry_point));
@@ -1697,22 +1739,22 @@ fn render_overview_snapshot(ui: &mut Ui, report: &BinaryReport, imported_api_cou
             (
                 "Sections",
                 report.sections.len().to_string(),
-                Color32::from_rgb(90, 160, 255),
+                ACCENT_GOLD,
             ),
             (
                 "Imported APIs",
                 imported_api_count.to_string(),
-                Color32::from_rgb(92, 184, 92),
+                ACCENT_SAGE,
             ),
             (
                 "Strings",
                 total_extracted_string_count(report).to_string(),
-                Color32::from_rgb(210, 144, 72),
+                ACCENT_COPPER,
             ),
             (
                 "TLS Callbacks",
                 report.protections.tls_callbacks.to_string(),
-                Color32::from_rgb(198, 122, 255),
+                ACCENT_ROSE,
             ),
         ],
     );
@@ -1721,7 +1763,7 @@ fn render_overview_snapshot(ui: &mut Ui, report: &BinaryReport, imported_api_cou
 fn render_notes_panel(ui: &mut Ui, notes: &[String]) {
     let t = theme();
     ui.label(RichText::new("Heuristic Notes").strong().color(t.title));
-    ui.add_space(8.0);
+    ui.add_space(GAP_SM);
     if notes.is_empty() {
         ui.label(RichText::new("No heuristic notes were emitted for this target.").color(t.muted));
         return;
@@ -1741,17 +1783,17 @@ fn metric_tile(ui: &mut Ui, title: &str, value: &str, accent: Color32) {
     let t = theme();
     egui::Frame::new()
         .fill(t.panel)
-        .corner_radius(egui::CornerRadius::same(20))
+        .corner_radius(egui::CornerRadius::same(RADIUS_LG))
         .stroke(egui::Stroke::new(1.0, accent.gamma_multiply(0.45)))
-        .inner_margin(egui::Margin::same(14))
+        .inner_margin(egui::Margin::same(PAD_MD))
         .show(ui, |ui| {
             // use available column width, with a sensible floor
             ui.set_min_width(ui.available_width().max(80.0));
             ui.set_min_height(84.0);
             ui.vertical_centered(|ui| {
-                ui.label(RichText::new(title).size(11.0).color(t.muted));
-                ui.add_space(6.0);
-                ui.label(RichText::new(value).size(20.0).strong().color(accent));
+                ui.label(RichText::new(title).size(FONT_CAPTION).color(t.muted));
+                ui.add_space(GAP_SM);
+                ui.label(RichText::new(value).size(FONT_H2).strong().color(accent));
             });
         });
 }
@@ -1760,12 +1802,12 @@ fn inline_fact(ui: &mut Ui, label: &str, value: &str) {
     let t = theme();
     egui::Frame::new()
         .fill(t.inset)
-        .corner_radius(egui::CornerRadius::same(16))
+        .corner_radius(egui::CornerRadius::same(RADIUS_SM))
         .stroke(egui::Stroke::new(1.0, t.border_soft))
         .inner_margin(egui::Margin::symmetric(12, 8))
         .show(ui, |ui| {
             ui.vertical(|ui| {
-                ui.label(RichText::new(label).size(10.5).color(t.muted));
+                ui.label(RichText::new(label).size(FONT_CAPTION).color(t.muted));
                 ui.label(RichText::new(value).monospace().color(t.text));
             });
         });
@@ -1798,7 +1840,7 @@ fn render_hex_viewer(
 
     framed_panel(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Offset").color(Color32::from_rgb(188, 195, 205)));
+            ui.label(RichText::new("Offset").color(theme().text));
             ui.add_sized(
                 [
                     if compact {
@@ -1850,29 +1892,29 @@ fn render_hex_viewer(
                         RichText::new(format!("{} bytes loaded", report.raw_bytes.len()))
                             .small()
                             .monospace()
-                            .color(Color32::from_rgb(126, 136, 149)),
+                            .color(theme().muted),
                     );
                 });
             }
         });
 
         if let Some(status) = hex_status.as_deref() {
-            ui.add_space(8.0);
+            ui.add_space(GAP_SM);
             ui.label(RichText::new(status).small().color(
                 if status.starts_with("Invalid") || status.contains("outside") {
-                    Color32::from_rgb(235, 104, 104)
+                    theme().danger
                 } else {
-                    Color32::from_rgb(150, 180, 150)
+                    theme().success
                 },
             ));
         }
     });
 
     if report.format_name == "PE" && !report.sections.is_empty() {
-        ui.add_space(10.0);
+        ui.add_space(GAP_MD);
         framed_panel(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new("RVA").color(Color32::from_rgb(188, 195, 205)));
+                ui.label(RichText::new("RVA").color(theme().text));
                 ui.add_sized(
                     [
                         if compact {
@@ -1910,9 +1952,9 @@ fn render_hex_viewer(
                 }
             });
 
-            ui.add_space(8.0);
+            ui.add_space(GAP_SM);
             ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new("Sections").color(Color32::from_rgb(188, 195, 205)));
+                ui.label(RichText::new("Sections").color(theme().text));
                 for section in &report.sections {
                     if ui.button(section.name.as_str()).clicked() {
                         let offset = (section.raw_address as usize).min(max_offset);
@@ -1929,7 +1971,7 @@ fn render_hex_viewer(
         });
     }
 
-    ui.add_space(10.0);
+    ui.add_space(GAP_MD);
 
     let selected_offset = (*hex_selected_offset).min(max_offset);
     let row_size = 16usize;
@@ -1944,33 +1986,33 @@ fn render_hex_viewer(
                 RichText::new(format!("Raw 0x{selected_offset:X}"))
                     .small()
                     .monospace()
-                    .color(Color32::from_rgb(152, 161, 174)),
+                    .color(theme().muted),
             );
             if let Some(rva) = rva_from_raw_offset(report, selected_offset) {
                 ui.label(
                     RichText::new(format!("RVA 0x{rva:X}"))
                         .small()
                         .monospace()
-                        .color(Color32::from_rgb(152, 161, 174)),
+                        .color(theme().muted),
                 );
             }
             if let Some(section_name) = section_name_for_raw_offset(report, selected_offset) {
                 ui.label(
                     RichText::new(section_name)
                         .small()
-                        .color(Color32::from_rgb(207, 94, 57)),
+                        .color(theme().primary),
                 );
             }
         });
-        ui.add_space(6.0);
+        ui.add_space(GAP_SM);
         ui.label(
             RichText::new(
                 "Offset        Hex Bytes                                              ASCII",
             )
             .monospace()
-            .color(Color32::from_rgb(142, 151, 163)),
+            .color(theme().muted),
         );
-        ui.add_space(6.0);
+        ui.add_space(GAP_SM);
 
         egui::ScrollArea::vertical()
             .auto_shrink([false; 2])
@@ -1991,14 +2033,14 @@ fn render_hex_viewer(
                     let text = RichText::new(line).monospace().color(if is_focus_row {
                         Color32::from_rgb(255, 210, 188)
                     } else {
-                        Color32::from_rgb(196, 202, 212)
+                        theme().text
                     });
 
                     if is_focus_row {
                         egui::Frame::new()
                             .fill(Color32::from_rgb(26, 17, 14))
-                            .corner_radius(egui::CornerRadius::same(16))
-                            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(207, 94, 57)))
+                            .corner_radius(egui::CornerRadius::same(RADIUS_SM))
+                            .stroke(egui::Stroke::new(1.0, theme().primary))
                             .inner_margin(egui::Margin::symmetric(8, 4))
                             .show(ui, |ui| {
                                 ui.label(text);
@@ -2025,7 +2067,7 @@ fn render_resources(ui: &mut Ui, report: &BinaryReport) {
         framed_panel(ui, |ui| {
             ui.label(
                 RichText::new("No PE resource directory was parsed for this target.")
-                    .color(Color32::from_rgb(140, 149, 160)),
+                    .color(theme().muted),
             );
         });
         return;
@@ -2048,9 +2090,9 @@ fn render_resources(ui: &mut Ui, report: &BinaryReport) {
         render_resource_identity(ui, report, file_name, architecture);
     });
 
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
     render_resource_snapshot(ui, report);
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
 
     if width >= 1320.0 {
         ui.columns(2, |columns| {
@@ -2059,7 +2101,7 @@ fn render_resources(ui: &mut Ui, report: &BinaryReport) {
         });
     } else {
         render_resource_tree_panel(ui, report);
-        ui.add_space(12.0);
+        ui.add_space(GAP_MD);
         render_resource_detail_stack(ui, report);
     }
 }
@@ -2071,14 +2113,14 @@ fn render_resource_identity(
     architecture: &str,
 ) {
     let t = theme();
-    ui.label(RichText::new(file_name).size(28.0).strong().color(t.title));
-    ui.add_space(4.0);
+    ui.label(RichText::new(file_name).size(FONT_H1).strong().color(t.title));
+    ui.add_space(GAP_XS);
 
     egui::Frame::new()
         .fill(t.inset)
-        .corner_radius(egui::CornerRadius::same(18))
+        .corner_radius(egui::CornerRadius::same(RADIUS_LG))
         .stroke(egui::Stroke::new(1.0, t.border_soft))
-        .inner_margin(egui::Margin::same(12))
+        .inner_margin(egui::Margin::same(PAD_MD))
         .show(ui, |ui| {
             ui.add(
                 egui::Label::new(
@@ -2091,7 +2133,7 @@ fn render_resource_identity(
             );
         });
 
-    ui.add_space(10.0);
+    ui.add_space(GAP_MD);
     ui.horizontal_wrapped(|ui| {
         pill(ui, "Resource Directory");
         pill(ui, architecture);
@@ -2103,7 +2145,7 @@ fn render_resource_identity(
         }
     });
 
-    ui.add_space(14.0);
+    ui.add_space(GAP_LG);
     ui.horizontal_wrapped(|ui| {
         inline_fact(ui, "Nodes", &report.resource_entries.len().to_string());
         inline_fact(
@@ -2135,12 +2177,12 @@ fn render_resource_snapshot(ui: &mut Ui, report: &BinaryReport) {
             (
                 "Resource Nodes",
                 report.resource_entries.len().to_string(),
-                Color32::from_rgb(90, 160, 255),
+                ACCENT_GOLD,
             ),
             (
                 "Version Rows",
                 report.version_info_rows.len().to_string(),
-                Color32::from_rgb(92, 184, 92),
+                ACCENT_SAGE,
             ),
             (
                 "Manifest",
@@ -2149,12 +2191,12 @@ fn render_resource_snapshot(ui: &mut Ui, report: &BinaryReport) {
                 } else {
                     "Missing".to_string()
                 },
-                Color32::from_rgb(210, 144, 72),
+                ACCENT_COPPER,
             ),
             (
                 "Build Signals",
                 report.pe_metadata_rows.len().to_string(),
-                Color32::from_rgb(198, 122, 255),
+                ACCENT_ROSE,
             ),
         ],
     );
@@ -2165,14 +2207,14 @@ fn render_resource_tree_panel(ui: &mut Ui, report: &BinaryReport) {
         ui.label(
             RichText::new("Resource Tree")
                 .strong()
-                .color(Color32::from_rgb(229, 233, 237)),
+                .color(theme().title),
         );
-        ui.add_space(8.0);
+        ui.add_space(GAP_SM);
 
         if report.resource_entries.is_empty() {
             ui.label(
                 RichText::new("No resource nodes were enumerated.")
-                    .color(Color32::from_rgb(140, 149, 160)),
+                    .color(theme().muted),
             );
             return;
         }
@@ -2189,7 +2231,7 @@ fn render_resource_tree_panel(ui: &mut Ui, report: &BinaryReport) {
                 (available - kind_width - size_width - code_page_width - 36.0).max(240.0);
 
             resource_tree_header(ui, name_width, kind_width, size_width, code_page_width);
-            ui.add_space(8.0);
+            ui.add_space(GAP_SM);
 
             vertical_surface_scroll(ui, "resource_tree_rows", tree_height, |ui| {
                 for entry in &report.resource_entries {
@@ -2201,7 +2243,7 @@ fn render_resource_tree_panel(ui: &mut Ui, report: &BinaryReport) {
                         size_width,
                         code_page_width,
                     );
-                    ui.add_space(6.0);
+                    ui.add_space(GAP_SM);
                 }
             });
         });
@@ -2213,16 +2255,16 @@ fn render_resource_detail_stack(ui: &mut Ui, report: &BinaryReport) {
     if !report.pe_metadata_rows.is_empty() {
         framed_panel(ui, |ui| {
             ui.label(RichText::new("PE Build Signals").strong().color(t.title));
-            ui.add_space(8.0);
+            ui.add_space(GAP_SM);
             render_kv_rows(ui, "pe_build_signals_rows", &report.pe_metadata_rows);
         });
 
-        ui.add_space(12.0);
+        ui.add_space(GAP_MD);
     }
 
     framed_panel(ui, |ui| {
         ui.label(RichText::new("Version Info").strong().color(t.title));
-        ui.add_space(8.0);
+        ui.add_space(GAP_SM);
 
         if report.version_info_rows.is_empty() {
             ui.label(RichText::new("No version resource was extracted.").color(t.muted));
@@ -2233,11 +2275,11 @@ fn render_resource_detail_stack(ui: &mut Ui, report: &BinaryReport) {
         }
     });
 
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
 
     framed_panel(ui, |ui| {
         ui.label(RichText::new("Manifest").strong().color(t.title));
-        ui.add_space(8.0);
+        ui.add_space(GAP_SM);
 
         if report.manifest_text.is_none() {
             ui.label(RichText::new("No application manifest was extracted.").color(t.muted));
@@ -2246,14 +2288,14 @@ fn render_resource_detail_stack(ui: &mut Ui, report: &BinaryReport) {
 
         if !report.manifest_rows.is_empty() {
             render_kv_rows(ui, "manifest_signal_rows", &report.manifest_rows);
-            ui.add_space(10.0);
+            ui.add_space(GAP_MD);
         }
 
         egui::Frame::new()
             .fill(t.inset)
-            .corner_radius(egui::CornerRadius::same(20))
+            .corner_radius(egui::CornerRadius::same(RADIUS_LG))
             .stroke(egui::Stroke::new(1.0, t.border_soft))
-            .inner_margin(egui::Margin::same(12))
+            .inner_margin(egui::Margin::same(PAD_MD))
             .show(ui, |ui| {
                 vertical_surface_scroll(ui, "manifest_text_scroll", 260.0, |ui| {
                     if let Some(text) = &report.manifest_text {
@@ -2303,7 +2345,7 @@ fn resource_tree_row(
     let t = theme();
     egui::Frame::new()
         .fill(t.inset)
-        .corner_radius(egui::CornerRadius::same(16))
+        .corner_radius(egui::CornerRadius::same(RADIUS_SM))
         .stroke(egui::Stroke::new(1.0, t.border_soft))
         .inner_margin(egui::Margin::symmetric(10, 8))
         .show(ui, |ui| {
@@ -2367,7 +2409,7 @@ fn render_metric_strip(ui: &mut Ui, metrics: &[(&str, String, Color32)]) {
             metric_tile(&mut columns[0], metrics[0].0, &metrics[0].1, metrics[0].2);
             metric_tile(&mut columns[1], metrics[1].0, &metrics[1].1, metrics[1].2);
         });
-        ui.add_space(10.0);
+        ui.add_space(GAP_MD);
         ui.columns(2, |columns| {
             metric_tile(&mut columns[0], metrics[2].0, &metrics[2].1, metrics[2].2);
             metric_tile(&mut columns[1], metrics[3].0, &metrics[3].1, metrics[3].2);
@@ -2376,7 +2418,7 @@ fn render_metric_strip(ui: &mut Ui, metrics: &[(&str, String, Color32)]) {
         for (index, (title, value, accent)) in metrics.iter().enumerate() {
             metric_tile(ui, title, value, *accent);
             if index + 1 < metrics.len() {
-                ui.add_space(10.0);
+                ui.add_space(GAP_MD);
             }
         }
     }
@@ -2386,9 +2428,9 @@ fn section_surface(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) {
     let t = theme();
     egui::Frame::new()
         .fill(t.inset)
-        .corner_radius(egui::CornerRadius::same(20))
+        .corner_radius(egui::CornerRadius::same(RADIUS_LG))
         .stroke(egui::Stroke::new(1.0, t.border_soft))
-        .inner_margin(egui::Margin::same(12))
+        .inner_margin(egui::Margin::same(PAD_MD))
         .show(ui, add_contents);
 }
 
@@ -2401,12 +2443,25 @@ fn tabular_surface(
     section_surface(ui, |ui| {
         egui::ScrollArea::horizontal()
             .id_salt(ui.id().with(id_source).with("tabular_surface"))
-            .auto_shrink([false, false])
+            // Fill the width but hug the table height so the surface never leaves a
+            // dead band below the rows or clips them into a cramped inner scroll.
+            .auto_shrink([false, true])
             .show(ui, |ui| {
                 ui.set_min_width(min_width);
                 add_contents(ui);
             });
     });
+}
+
+/// Column header cell for the data tables — uppercase, muted, and high enough
+/// contrast to read clearly against the striped body rows.
+fn table_header_cell(ui: &mut Ui, title: &str) {
+    ui.label(
+        RichText::new(title.to_ascii_uppercase())
+            .size(FONT_CAPTION)
+            .strong()
+            .color(theme().muted),
+    );
 }
 
 fn vertical_surface_scroll(
@@ -2460,31 +2515,32 @@ fn render_sections(ui: &mut Ui, report: &BinaryReport) {
             (
                 "Count",
                 report.sections.len().to_string(),
-                Color32::from_rgb(90, 160, 255),
+                ACCENT_GOLD,
             ),
             (
                 "Executable",
                 executable_sections.to_string(),
-                Color32::from_rgb(92, 184, 92),
+                ACCENT_SAGE,
             ),
             (
                 "Writable",
                 writable_sections.to_string(),
-                Color32::from_rgb(210, 144, 72),
+                ACCENT_COPPER,
             ),
             (
                 "High Entropy",
                 high_entropy_sections.to_string(),
-                Color32::from_rgb(198, 122, 255),
+                ACCENT_ROSE,
             ),
         ],
     );
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
 
     framed_panel(ui, |ui| {
         tabular_surface(ui, "sections_table", 860.0, |ui| {
             TableBuilder::new(ui)
                 .striped(true)
+                .vscroll(false)
                 .column(Column::initial(120.0))
                 .column(Column::initial(100.0))
                 .column(Column::initial(100.0))
@@ -2503,7 +2559,7 @@ fn render_sections(ui: &mut Ui, report: &BinaryReport) {
                         "Entropy",
                     ] {
                         header.col(|ui| {
-                            ui.strong(title);
+                            table_header_cell(ui, title);
                         });
                     }
                 })
@@ -2552,6 +2608,7 @@ fn render_sections(ui: &mut Ui, report: &BinaryReport) {
 }
 
 fn render_imports(ui: &mut Ui, report: &BinaryReport, filter: &mut String) {
+    let t = theme();
     render_panel_title(
         ui,
         "Imports",
@@ -2585,17 +2642,17 @@ fn render_imports(ui: &mut Ui, report: &BinaryReport, filter: &mut String) {
             (
                 "DLLs",
                 report.imports.len().to_string(),
-                Color32::from_rgb(90, 160, 255),
+                ACCENT_GOLD,
             ),
             (
                 "APIs",
                 import_count.to_string(),
-                Color32::from_rgb(92, 184, 92),
+                ACCENT_SAGE,
             ),
             (
                 "Ordinals",
                 ordinal_count.to_string(),
-                Color32::from_rgb(210, 144, 72),
+                ACCENT_COPPER,
             ),
             (
                 "Empty Groups",
@@ -2605,17 +2662,15 @@ fn render_imports(ui: &mut Ui, report: &BinaryReport, filter: &mut String) {
                     .filter(|dll| dll.functions.is_empty())
                     .count()
                     .to_string(),
-                Color32::from_rgb(198, 122, 255),
+                ACCENT_ROSE,
             ),
         ],
     );
-    ui.add_space(8.0);
+    ui.add_space(GAP_SM);
 
     ui.horizontal(|ui| {
         ui.label(
-            RichText::new("Search:")
-                .small()
-                .color(Color32::from_rgb(151, 143, 135)),
+            RichText::new("Search:").small().color(t.muted),
         );
         ui.add(
             egui::TextEdit::singleline(filter)
@@ -2626,13 +2681,15 @@ fn render_imports(ui: &mut Ui, report: &BinaryReport, filter: &mut String) {
             filter.clear();
         }
     });
-    ui.add_space(8.0);
+    ui.add_space(GAP_SM);
 
     let filter_lower = filter.to_ascii_lowercase();
 
     framed_panel(ui, |ui| {
         section_surface(ui, |ui| {
-            vertical_surface_scroll(ui, "imports_list_scroll", 560.0, |ui| {
+            // Collapsing headers (closed by default for large DLLs) keep this short;
+            // let the page scroll instead of nesting a second scroll region here.
+            {
                 for dll in &report.imports {
                     let dll_matches =
                         filter.is_empty() || dll.name.to_ascii_lowercase().contains(&filter_lower);
@@ -2658,14 +2715,14 @@ fn render_imports(ui: &mut Ui, report: &BinaryReport, filter: &mut String) {
                                 ui.label(
                                     RichText::new("Container or library reference only")
                                         .small()
-                                        .color(Color32::GRAY),
+                                        .color(t.muted),
                                 );
                             }
                             for function in &matching_functions {
                                 egui::Frame::new()
-                                    .fill(Color32::from_rgb(9, 13, 18))
-                                    .corner_radius(egui::CornerRadius::same(14))
-                                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(28, 36, 46)))
+                                    .fill(t.inset)
+                                    .corner_radius(egui::CornerRadius::same(RADIUS_MD))
+                                    .stroke(egui::Stroke::new(1.0, t.border_soft))
                                     .inner_margin(egui::Margin::symmetric(10, 6))
                                     .show(ui, |ui| {
                                         ui.horizontal_wrapped(|ui| {
@@ -2676,16 +2733,16 @@ fn render_imports(ui: &mut Ui, report: &BinaryReport, filter: &mut String) {
                                                     function.ordinal
                                                 ))
                                                 .small()
-                                                .color(Color32::from_rgb(145, 154, 166)),
+                                                .color(t.muted),
                                             );
                                         });
                                     });
-                                ui.add_space(6.0);
+                                ui.add_space(GAP_SM);
                             }
                         });
-                    ui.add_space(6.0);
+                    ui.add_space(GAP_SM);
                 }
-            });
+            }
         });
     });
 }
@@ -2708,7 +2765,7 @@ fn render_exports(ui: &mut Ui, report: &BinaryReport) {
             (
                 "Exports",
                 report.exports.len().to_string(),
-                Color32::from_rgb(90, 160, 255),
+                ACCENT_GOLD,
             ),
             (
                 "Named",
@@ -2718,7 +2775,7 @@ fn render_exports(ui: &mut Ui, report: &BinaryReport) {
                     .filter(|export| export.name != "<ordinal>")
                     .count()
                     .to_string(),
-                Color32::from_rgb(92, 184, 92),
+                ACCENT_SAGE,
             ),
             (
                 "Ordinal",
@@ -2728,7 +2785,7 @@ fn render_exports(ui: &mut Ui, report: &BinaryReport) {
                     .filter(|export| export.name == "<ordinal>")
                     .count()
                     .to_string(),
-                Color32::from_rgb(210, 144, 72),
+                ACCENT_COPPER,
             ),
             (
                 "Last RVA",
@@ -2739,23 +2796,24 @@ fn render_exports(ui: &mut Ui, report: &BinaryReport) {
                     .max()
                     .map(|value| format!("0x{value:X}"))
                     .unwrap_or_else(|| "-".to_string()),
-                Color32::from_rgb(198, 122, 255),
+                ACCENT_ROSE,
             ),
         ],
     );
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
 
     framed_panel(ui, |ui| {
         tabular_surface(ui, "exports_table", 520.0, |ui| {
             TableBuilder::new(ui)
                 .striped(true)
+                .vscroll(false)
                 .column(Column::remainder())
                 .column(Column::initial(120.0))
                 .column(Column::initial(120.0))
                 .header(24.0, |mut header| {
                     for title in ["Name", "Offset", "RVA"] {
                         header.col(|ui| {
-                            ui.strong(title);
+                            table_header_cell(ui, title);
                         });
                     }
                 })
@@ -2805,7 +2863,7 @@ fn render_strings(
 
     framed_panel(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Search").color(Color32::from_rgb(188, 195, 205)));
+            ui.label(RichText::new("Search").color(theme().text));
             ui.add_sized(
                 [
                     if compact {
@@ -2823,7 +2881,7 @@ fn render_strings(
             }
         });
 
-        ui.add_space(8.0);
+        ui.add_space(GAP_SM);
         ui.horizontal_wrapped(|ui| {
             ui.checkbox(case_sensitive, "Case sensitive");
             ui.checkbox(show_ascii, "ASCII");
@@ -2831,7 +2889,7 @@ fn render_strings(
         });
     });
 
-    ui.add_space(10.0);
+    ui.add_space(GAP_MD);
 
     let normalized_needle =
         (!*case_sensitive && !string_filter.is_empty()).then(|| string_filter.to_ascii_lowercase());
@@ -2851,26 +2909,26 @@ fn render_strings(
             (
                 "Stored",
                 report.strings.len().to_string(),
-                Color32::from_rgb(90, 160, 255),
+                ACCENT_GOLD,
             ),
             (
                 "Visible",
                 filtered.total_visible.to_string(),
-                Color32::from_rgb(92, 184, 92),
+                ACCENT_SAGE,
             ),
             (
                 "ASCII",
                 report.ascii_string_count.to_string(),
-                Color32::from_rgb(210, 144, 72),
+                ACCENT_COPPER,
             ),
             (
                 "UTF-16LE",
                 report.utf16_string_count.to_string(),
-                Color32::from_rgb(198, 122, 255),
+                ACCENT_ROSE,
             ),
         ],
     );
-    ui.add_space(10.0);
+    ui.add_space(GAP_MD);
 
     ui.horizontal_wrapped(|ui| {
         ui.label(
@@ -2881,14 +2939,14 @@ fn render_strings(
                 report.strings.len()
             ))
             .small()
-            .color(Color32::from_rgb(126, 136, 149)),
+            .color(theme().muted),
         );
         if !string_filter.is_empty() {
             ui.label(
                 RichText::new(format!("query=\"{}\"", string_filter))
                     .small()
                     .monospace()
-                    .color(Color32::from_rgb(207, 94, 57)),
+                    .color(theme().primary),
             );
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -2946,7 +3004,7 @@ fn render_strings(
             }
         });
     });
-    ui.add_space(8.0);
+    ui.add_space(GAP_SM);
 
     if filtered.total_visible == 0 {
         let message = if !*show_ascii && !*show_utf16 {
@@ -2956,8 +3014,8 @@ fn render_strings(
         };
 
         framed_panel(ui, |ui| {
-            ui.label(RichText::new(message).color(Color32::from_rgb(140, 149, 160)));
-            ui.add_space(10.0);
+            ui.label(RichText::new(message).color(theme().muted));
+            ui.add_space(GAP_MD);
             ui.horizontal_wrapped(|ui| {
                 if !string_filter.is_empty()
                     && secondary_button_sized(ui, "Clear Search", None, 150.0).clicked()
@@ -2979,13 +3037,14 @@ fn render_strings(
         tabular_surface(ui, "strings_table", 640.0, |ui| {
             TableBuilder::new(ui)
                 .striped(true)
+                .vscroll(false)
                 .column(Column::initial(90.0))
                 .column(Column::initial(120.0))
                 .column(Column::remainder())
                 .header(24.0, |mut header| {
                     for title in ["Kind", "Offset", "Value"] {
                         header.col(|ui| {
-                            ui.strong(title);
+                            table_header_cell(ui, title);
                         });
                     }
                 })
@@ -2994,9 +3053,9 @@ fn render_strings(
                         body.row(22.0, |mut row| {
                             row.col(|ui| {
                                 ui.label(RichText::new(string.kind).color(match string.kind {
-                                    "ASCII" => Color32::from_rgb(110, 174, 255),
-                                    "UTF-16LE" => Color32::from_rgb(124, 208, 156),
-                                    _ => Color32::LIGHT_GRAY,
+                                    "ASCII" => ACCENT_GOLD,
+                                    "UTF-16LE" => theme().success,
+                                    _ => theme().muted,
                                 }));
                             });
                             row.col(|ui| {
@@ -3090,23 +3149,24 @@ fn render_disassembly(ui: &mut Ui, report: &BinaryReport) {
             (
                 "Instructions",
                 report.disassembly.len().to_string(),
-                Color32::from_rgb(90, 160, 255),
+                ACCENT_GOLD,
             ),
             (
                 "Entry",
                 format!("0x{:X}", report.entry_point),
-                Color32::from_rgb(92, 184, 92),
+                ACCENT_SAGE,
             ),
-            ("First", first_address, Color32::from_rgb(210, 144, 72)),
-            ("Last", last_address, Color32::from_rgb(198, 122, 255)),
+            ("First", first_address, ACCENT_COPPER),
+            ("Last", last_address, ACCENT_ROSE),
         ],
     );
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
 
     framed_panel(ui, |ui| {
         tabular_surface(ui, "disassembly_table", 780.0, |ui| {
             TableBuilder::new(ui)
                 .striped(true)
+                .vscroll(false)
                 .column(Column::initial(140.0))
                 .column(Column::initial(220.0))
                 .column(Column::initial(110.0))
@@ -3114,7 +3174,7 @@ fn render_disassembly(ui: &mut Ui, report: &BinaryReport) {
                 .header(24.0, |mut header| {
                     for title in ["Address", "Bytes", "Mnemonic", "Operands"] {
                         header.col(|ui| {
-                            ui.strong(title);
+                            table_header_cell(ui, title);
                         });
                     }
                 })
@@ -3290,32 +3350,32 @@ fn render_archive(ui: &mut Ui, report: &BinaryReport) {
             (
                 "Entries",
                 report.archive_entry_total.to_string(),
-                Color32::from_rgb(90, 160, 255),
+                ACCENT_GOLD,
             ),
             (
                 "Stored",
                 report.archive_entries.len().to_string(),
-                Color32::from_rgb(92, 184, 92),
+                ACCENT_SAGE,
             ),
             (
                 "Total Size",
                 total_archive_size.to_string(),
-                Color32::from_rgb(210, 144, 72),
+                ACCENT_COPPER,
             ),
             (
                 "Format",
                 report.format_name.clone(),
-                Color32::from_rgb(198, 122, 255),
+                ACCENT_ROSE,
             ),
         ],
     );
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
 
     framed_panel(ui, |ui| {
         if report.archive_entries.is_empty() {
             ui.label(
                 RichText::new("No parsed archive member table for this file.")
-                    .color(Color32::from_rgb(140, 149, 160)),
+                    .color(theme().muted),
             );
             return;
         }
@@ -3328,21 +3388,22 @@ fn render_archive(ui: &mut Ui, report: &BinaryReport) {
                     report.archive_entries_omitted
                 ))
                 .small()
-                .color(Color32::from_rgb(210, 170, 120)),
+                .color(theme().warning),
             );
-            ui.add_space(8.0);
+            ui.add_space(GAP_SM);
         }
 
         tabular_surface(ui, "archive_table", 560.0, |ui| {
             TableBuilder::new(ui)
                 .striped(true)
+                .vscroll(false)
                 .column(Column::remainder())
                 .column(Column::initial(120.0))
                 .column(Column::initial(120.0))
                 .header(24.0, |mut header| {
                     for title in ["Name", "Kind", "Size"] {
                         header.col(|ui| {
-                            ui.strong(title);
+                            table_header_cell(ui, title);
                         });
                     }
                 })
@@ -3387,26 +3448,26 @@ fn render_headers(ui: &mut Ui, report: &BinaryReport) {
             (
                 "DOS Rows",
                 report.dos_header.len().to_string(),
-                Color32::from_rgb(90, 160, 255),
+                ACCENT_GOLD,
             ),
             (
                 "File Rows",
                 report.file_header.len().to_string(),
-                Color32::from_rgb(92, 184, 92),
+                ACCENT_SAGE,
             ),
             (
                 "Optional Rows",
                 report.optional_header.len().to_string(),
-                Color32::from_rgb(210, 144, 72),
+                ACCENT_COPPER,
             ),
             (
                 "Rich Rows",
                 report.rich_headers.len().to_string(),
-                Color32::from_rgb(198, 122, 255),
+                ACCENT_ROSE,
             ),
         ],
     );
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
 
     if ui.available_width() >= 1060.0 {
         ui.columns(3, |columns| {
@@ -3419,17 +3480,17 @@ fn render_headers(ui: &mut Ui, report: &BinaryReport) {
             render_kv_group(&mut columns[0], "DOS Header", &report.dos_header);
             render_kv_group(&mut columns[1], "File Header", &report.file_header);
         });
-        ui.add_space(12.0);
+        ui.add_space(GAP_MD);
         render_kv_group(ui, "Optional Header", &report.optional_header);
     } else {
         render_kv_group(ui, "DOS Header", &report.dos_header);
-        ui.add_space(12.0);
+        ui.add_space(GAP_MD);
         render_kv_group(ui, "File Header", &report.file_header);
-        ui.add_space(12.0);
+        ui.add_space(GAP_MD);
         render_kv_group(ui, "Optional Header", &report.optional_header);
     }
 
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
     render_kv_group(ui, "Rich Header", &report.rich_headers);
 }
 
@@ -3483,26 +3544,26 @@ fn render_protection(ui: &mut Ui, report: &BinaryReport) {
             (
                 "Mitigations",
                 enabled_mitigations.to_string(),
-                Color32::from_rgb(90, 160, 255),
+                ACCENT_GOLD,
             ),
             (
                 "Findings",
                 report.protection_findings.len().to_string(),
-                Color32::from_rgb(92, 184, 92),
+                ACCENT_SAGE,
             ),
             (
                 "High",
                 high_findings.to_string(),
-                Color32::from_rgb(210, 144, 72),
+                ACCENT_COPPER,
             ),
             (
                 "TLS",
                 report.protections.tls_callbacks.to_string(),
-                Color32::from_rgb(198, 122, 255),
+                ACCENT_ROSE,
             ),
         ],
     );
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
 
     if ui.available_width() >= 1080.0 {
         ui.columns(2, |columns| {
@@ -3518,7 +3579,7 @@ fn render_protection(ui: &mut Ui, report: &BinaryReport) {
         framed_panel(ui, |ui| {
             render_kv_group(ui, "Mitigations", &mitigations);
         });
-        ui.add_space(12.0);
+        ui.add_space(GAP_MD);
         framed_panel(ui, |ui| {
             render_findings(ui, &report.protection_findings);
         });
@@ -3538,26 +3599,26 @@ fn render_xor(ui: &mut Ui, report: &BinaryReport) {
             (
                 "Single-byte",
                 report.xor_candidates.len().to_string(),
-                Color32::from_rgb(90, 160, 255),
+                ACCENT_GOLD,
             ),
             (
                 "Common Keys",
                 report.xor_common_key_hits.len().to_string(),
-                Color32::from_rgb(92, 184, 92),
+                ACCENT_SAGE,
             ),
             (
                 "Patterns",
                 report.xor_patterns.len().to_string(),
-                Color32::from_rgb(210, 144, 72),
+                ACCENT_COPPER,
             ),
             (
                 "Strings",
                 total_extracted_string_count(report).to_string(),
-                Color32::from_rgb(198, 122, 255),
+                ACCENT_ROSE,
             ),
         ],
     );
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
 
     if ui.available_width() >= 1080.0 {
         ui.columns(2, |columns| {
@@ -3588,7 +3649,7 @@ fn render_xor(ui: &mut Ui, report: &BinaryReport) {
                 "No high-confidence single-byte XOR candidates found.",
             );
         });
-        ui.add_space(12.0);
+        ui.add_space(GAP_MD);
         framed_panel(ui, |ui| {
             render_xor_candidates_panel(
                 ui,
@@ -3599,27 +3660,29 @@ fn render_xor(ui: &mut Ui, report: &BinaryReport) {
         });
     }
 
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
     framed_panel(ui, |ui| {
         ui.label(
             RichText::new("Repeating Multi-byte Patterns")
                 .strong()
-                .color(Color32::from_rgb(229, 233, 237)),
+                .color(theme().title),
         );
-        ui.add_space(8.0);
+        ui.add_space(GAP_SM);
         if report.xor_patterns.is_empty() {
             ui.label("No repeating 2/4/8/16-byte patterns crossed the reporting threshold.");
         } else {
             tabular_surface(ui, "xor_patterns_table", 360.0, |ui| {
                 TableBuilder::new(ui)
                     .striped(true)
+                    .vscroll(false)
+                .vscroll(false)
                     .column(Column::initial(80.0))
                     .column(Column::initial(80.0))
                     .column(Column::remainder())
                     .header(24.0, |mut header| {
                         for title in ["Len", "Count", "Pattern"] {
                             header.col(|ui| {
-                                ui.strong(title);
+                                table_header_cell(ui, title);
                             });
                         }
                     })
@@ -3647,12 +3710,12 @@ fn render_kv_group(ui: &mut Ui, title: &str, rows: &[KeyValueRow]) {
     let t = theme();
     egui::Frame::new()
         .fill(t.panel)
-        .corner_radius(egui::CornerRadius::same(22))
+        .corner_radius(egui::CornerRadius::same(RADIUS_LG))
         .stroke(egui::Stroke::new(1.0, t.border_soft))
-        .inner_margin(egui::Margin::same(14))
+        .inner_margin(egui::Margin::same(PAD_MD))
         .show(ui, |ui| {
             ui.label(RichText::new(title).strong().color(t.title));
-            ui.add_space(8.0);
+            ui.add_space(GAP_SM);
             render_kv_rows(ui, title, rows);
         });
 }
@@ -3669,7 +3732,7 @@ fn render_kv_rows(ui: &mut Ui, id_source: impl std::hash::Hash, rows: &[KeyValue
         .spacing([16.0, 10.0])
         .show(ui, |ui| {
             for row in rows {
-                ui.label(RichText::new(&row.key).size(11.5).color(t.muted));
+                ui.label(RichText::new(&row.key).size(FONT_SMALL).color(t.muted));
                 ui.add(
                     egui::Label::new(RichText::new(&row.value).monospace().color(t.text)).wrap(),
                 );
@@ -3681,7 +3744,7 @@ fn render_kv_rows(ui: &mut Ui, id_source: impl std::hash::Hash, rows: &[KeyValue
 fn render_findings(ui: &mut Ui, findings: &[crate::analyzer::ProtectionFinding]) {
     let t = theme();
     ui.label(RichText::new("Findings").strong().color(t.title));
-    ui.add_space(8.0);
+    ui.add_space(GAP_SM);
     if findings.is_empty() {
         ui.label(
             RichText::new("No suspicious findings were emitted for this file.").color(t.muted),
@@ -3692,16 +3755,16 @@ fn render_findings(ui: &mut Ui, findings: &[crate::analyzer::ProtectionFinding])
     vertical_surface_scroll(ui, "protection_findings_scroll", 320.0, |ui| {
         for finding in findings {
             let accent = match finding.severity {
-                "high" => Color32::from_rgb(235, 104, 104),
-                "medium" => Color32::from_rgb(233, 184, 97),
-                _ => Color32::from_rgb(150, 180, 150),
+                "high" => theme().danger,
+                "medium" => theme().warning,
+                _ => theme().success,
             };
 
             egui::Frame::new()
                 .fill(t.inset)
-                .corner_radius(egui::CornerRadius::same(16))
+                .corner_radius(egui::CornerRadius::same(RADIUS_SM))
                 .stroke(egui::Stroke::new(1.0, accent.gamma_multiply(0.55)))
-                .inner_margin(egui::Margin::same(12))
+                .inner_margin(egui::Margin::same(PAD_MD))
                 .show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| {
                         ui.label(
@@ -3712,21 +3775,21 @@ fn render_findings(ui: &mut Ui, findings: &[crate::analyzer::ProtectionFinding])
                         );
                         ui.label(RichText::new(&finding.title).strong().color(t.title));
                     });
-                    ui.add_space(4.0);
+                    ui.add_space(GAP_XS);
                     ui.label(RichText::new(&finding.detail).color(t.muted));
                 });
-            ui.add_space(8.0);
+            ui.add_space(GAP_SM);
         }
     });
 }
 
 fn xor_readability_color(readability: f32) -> Color32 {
     if readability >= 70.0 {
-        Color32::from_rgb(124, 208, 156)
+        theme().success
     } else if readability >= 45.0 {
-        Color32::from_rgb(233, 184, 97)
+        theme().warning
     } else {
-        Color32::from_rgb(145, 154, 166)
+        theme().muted
     }
 }
 
@@ -3739,32 +3802,32 @@ fn render_xor_candidates_panel(
     ui.label(
         RichText::new(title)
             .strong()
-            .color(Color32::from_rgb(229, 233, 237)),
+            .color(theme().title),
     );
-    ui.add_space(8.0);
+    ui.add_space(GAP_SM);
     if candidates.is_empty() {
-        ui.label(RichText::new(empty_message).color(Color32::from_rgb(140, 149, 160)));
+        ui.label(RichText::new(empty_message).color(theme().muted));
     } else {
         vertical_surface_scroll(ui, title, 320.0, |ui| {
             for candidate in candidates {
                 let accent = xor_readability_color(candidate.readability);
 
                 egui::Frame::new()
-                    .fill(Color32::from_rgb(10, 14, 19))
-                    .corner_radius(egui::CornerRadius::same(16))
-                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(29, 38, 49)))
-                    .inner_margin(egui::Margin::same(12))
+                    .fill(theme().inset)
+                    .corner_radius(egui::CornerRadius::same(RADIUS_SM))
+                    .stroke(egui::Stroke::new(1.0, theme().border_soft))
+                    .inner_margin(egui::Margin::same(PAD_MD))
                     .show(ui, |ui| {
                         ui.horizontal_wrapped(|ui| {
                             ui.label(
                                 RichText::new(&candidate.source)
                                     .small()
-                                    .color(Color32::from_rgb(145, 154, 166)),
+                                    .color(theme().muted),
                             );
                             ui.label(
                                 RichText::new(format!("key={}", candidate.key))
                                     .monospace()
-                                    .color(Color32::from_rgb(210, 216, 224)),
+                                    .color(theme().text),
                             );
                             ui.label(
                                 RichText::new(format!("{:.1}%", candidate.readability))
@@ -3772,14 +3835,14 @@ fn render_xor_candidates_panel(
                                     .color(accent),
                             );
                         });
-                        ui.add_space(4.0);
+                        ui.add_space(GAP_XS);
                         ui.label(
                             RichText::new(&candidate.preview)
                                 .monospace()
-                                .color(Color32::from_rgb(186, 194, 204)),
+                                .color(theme().text),
                         );
                     });
-                ui.add_space(8.0);
+                ui.add_space(GAP_SM);
             }
         });
     }
@@ -3787,7 +3850,7 @@ fn render_xor_candidates_panel(
 
 fn overview_row(ui: &mut Ui, label: &str, value: &str) {
     let t = theme();
-    ui.label(RichText::new(label).size(11.5).color(t.muted));
+    ui.label(RichText::new(label).size(FONT_SMALL).color(t.muted));
     ui.label(
         RichText::new(value)
             .text_style(TextStyle::Monospace)
@@ -3810,7 +3873,6 @@ fn icon_tile(ui: &mut Ui, icon: AppIcon, accent: Color32, fill: Color32, size: f
         rect.shrink2(egui::vec2(size * 0.28, size * 0.28)),
         icon,
         accent,
-        (size / 18.0).max(1.4),
     );
 }
 
@@ -3920,7 +3982,7 @@ fn shell_section_label(ui: &mut Ui, text: &str) {
             .strong()
             .color(t.status),
     );
-    ui.add_space(8.0);
+    ui.add_space(GAP_SM);
 }
 
 fn workspace_status_chip(ui: &mut Ui, text: &str) {
@@ -3928,7 +3990,7 @@ fn workspace_status_chip(ui: &mut Ui, text: &str) {
     egui::Frame::new()
         .fill(t.primary_soft)
         .stroke(egui::Stroke::new(1.0, t.primary_border))
-        .corner_radius(egui::CornerRadius::same(14))
+        .corner_radius(egui::CornerRadius::same(RADIUS_MD))
         .inner_margin(egui::Margin::symmetric(12, 10))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -3985,14 +4047,14 @@ fn primary_action_button_with_width(
             egui::pos2(cursor_x, content_rect.center().y - 10.0),
             egui::vec2(20.0, 20.0),
         );
-        paint_icon(ui.painter(), icon_rect, icon, t.primary_text, 1.8);
+        paint_icon(ui.painter(), icon_rect, icon, t.primary_text);
         cursor_x += 30.0;
     }
     ui.painter().text(
         egui::pos2(cursor_x, rect.center().y),
         egui::Align2::LEFT_CENTER,
         label,
-        egui::FontId::proportional(14.0),
+        egui::FontId::proportional(FONT_BODY),
         t.primary_text,
     );
     response
@@ -4025,14 +4087,14 @@ fn secondary_action_button_with_width(
             egui::pos2(cursor_x, content_rect.center().y - 10.0),
             egui::vec2(20.0, 20.0),
         );
-        paint_icon(ui.painter(), icon_rect, icon, t.title, 1.8);
+        paint_icon(ui.painter(), icon_rect, icon, t.title);
         cursor_x += 30.0;
     }
     ui.painter().text(
         egui::pos2(cursor_x, rect.center().y),
         egui::Align2::LEFT_CENTER,
         label,
-        egui::FontId::proportional(13.8),
+        egui::FontId::proportional(FONT_BODY),
         t.title,
     );
     response
@@ -4040,10 +4102,10 @@ fn secondary_action_button_with_width(
 
 fn ghost_action_button(ui: &mut Ui, label: &str, full_width: bool) -> egui::Response {
     let t = theme();
-    let mut button = egui::Button::new(RichText::new(label).size(13.0).color(t.text))
+    let mut button = egui::Button::new(RichText::new(label).size(FONT_BODY).color(t.text))
         .fill(t.panel_alt)
         .stroke(egui::Stroke::new(1.0, t.border_soft))
-        .corner_radius(egui::CornerRadius::same(14));
+        .corner_radius(egui::CornerRadius::same(RADIUS_MD));
     if full_width {
         button = button.min_size(egui::vec2(ui.available_width(), 34.0));
     }
@@ -4062,16 +4124,16 @@ fn capability_card(
     egui::Frame::new()
         .fill(t.panel)
         .stroke(egui::Stroke::new(1.0, t.border_soft))
-        .corner_radius(egui::CornerRadius::same(22))
-        .inner_margin(egui::Margin::same(16))
+        .corner_radius(egui::CornerRadius::same(RADIUS_LG))
+        .inner_margin(egui::Margin::same(PAD_LG))
         .show(ui, |ui| {
             ui.set_min_height(154.0);
             icon_tile(ui, icon, accent, accent.gamma_multiply(0.12), 32.0);
-            ui.add_space(12.0);
-            ui.label(RichText::new(title).size(15.0).strong().color(t.title));
-            ui.add_space(4.0);
-            ui.label(RichText::new(subtitle).size(12.3).color(t.muted));
-            ui.add_space(10.0);
+            ui.add_space(GAP_MD);
+            ui.label(RichText::new(title).size(FONT_LABEL).strong().color(t.title));
+            ui.add_space(GAP_XS);
+            ui.label(RichText::new(subtitle).size(FONT_SMALL).color(t.muted));
+            ui.add_space(GAP_MD);
             match footer {
                 CardFooter::Progress(value) => {
                     let width = (ui.available_width() - 6.0).max(80.0);
@@ -4094,7 +4156,7 @@ fn capability_card(
                         );
                         let (rect, _) =
                             ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-                        paint_icon(ui.painter(), rect, AppIcon::Upload, t.status, 1.3);
+                        paint_icon(ui.painter(), rect, AppIcon::Upload, t.status);
                     });
                 }
                 CardFooter::Badges(values) => {
@@ -4127,24 +4189,24 @@ fn framed_panel(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) {
     let t = theme();
     egui::Frame::new()
         .fill(t.panel)
-        .corner_radius(egui::CornerRadius::same(24))
+        .corner_radius(egui::CornerRadius::same(RADIUS_XL))
         .stroke(egui::Stroke::new(1.0, t.border))
-        .inner_margin(egui::Margin::same(16))
+        .inner_margin(egui::Margin::same(PAD_LG))
         .show(ui, add_contents);
 }
 
 fn render_panel_title(ui: &mut Ui, title: &str, subtitle: &str) {
     let t = theme();
-    ui.label(RichText::new(title).size(22.0).strong().color(t.title));
+    ui.label(RichText::new(title).size(FONT_H2).strong().color(t.title));
     ui.label(RichText::new(subtitle).small().color(t.status));
-    ui.add_space(12.0);
+    ui.add_space(GAP_MD);
 }
 
 fn render_placeholder_panel(ui: &mut Ui, title: &str, detail: &str) {
     let t = theme();
     framed_panel(ui, |ui| {
         ui.label(RichText::new(title).strong().color(t.title));
-        ui.add_space(6.0);
+        ui.add_space(GAP_SM);
         ui.label(RichText::new(detail).color(t.muted));
     });
 }
@@ -4194,7 +4256,7 @@ fn nav_button(ui: &mut Ui, icon: AppIcon, label: &str, selected: bool) -> egui::
     let text = if selected {
         t.primary
     } else {
-        Color32::from_rgb(186, 193, 209)
+        theme().text
     };
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 40.0), egui::Sense::click());
@@ -4214,12 +4276,12 @@ fn nav_button(ui: &mut Ui, icon: AppIcon, label: &str, selected: bool) -> egui::
         egui::pos2(rect.left() + 28.0, rect.center().y),
         egui::vec2(16.0, 16.0),
     );
-    paint_icon(ui.painter(), icon_rect, icon, text, 1.6);
+    paint_icon(ui.painter(), icon_rect, icon, text);
     ui.painter().text(
         egui::pos2(rect.left() + 54.0, rect.center().y),
         egui::Align2::LEFT_CENTER,
         label,
-        egui::FontId::proportional(13.6),
+        egui::FontId::proportional(FONT_BODY),
         text,
     );
     response
@@ -4229,7 +4291,7 @@ fn pill(ui: &mut Ui, text: &str) {
     let t = theme();
     egui::Frame::new()
         .fill(t.panel_alt)
-        .corner_radius(egui::CornerRadius::same(30))
+        .corner_radius(egui::CornerRadius::same(RADIUS_XL))
         .stroke(egui::Stroke::new(1.0, t.border_soft))
         .inner_margin(egui::Margin::symmetric(14, 8))
         .show(ui, |ui| {
@@ -4241,7 +4303,7 @@ fn sidebar_pill(ui: &mut Ui, text: &str) {
     let t = theme();
     egui::Frame::new()
         .fill(t.inset)
-        .corner_radius(egui::CornerRadius::same(12))
+        .corner_radius(egui::CornerRadius::same(RADIUS_SM))
         .stroke(egui::Stroke::new(1.0, t.border_soft))
         .inner_margin(egui::Margin::symmetric(10, 6))
         .show(ui, |ui| {
@@ -4284,7 +4346,6 @@ fn titlebar_button(
         } else {
             t.title
         },
-        1.5,
     );
     let response = response.on_hover_text(tooltip);
     if response.clicked() {
@@ -4318,7 +4379,6 @@ fn render_help_fab(ctx: &egui::Context) {
                 rect.shrink2(egui::vec2(16.0, 16.0)),
                 AppIcon::Info,
                 t.title,
-                1.7,
             );
             if response.clicked() {
                 let mut open = ctx
@@ -4338,31 +4398,31 @@ fn render_help_fab(ctx: &egui::Context) {
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
-                    ui.add_space(8.0);
+                    ui.add_space(GAP_SM);
                     ui.label(
                         RichText::new("BLACKPOINT V2.4.0-STABLE")
                             .strong()
-                            .size(18.0)
+                            .size(FONT_H3)
                             .color(t.primary),
                     );
-                    ui.add_space(4.0);
+                    ui.add_space(GAP_XS);
                     ui.label(
                         RichText::new("Static analysis workbench for reverse engineering, malware triage, and binary inspection.")
                             .small()
                             .color(t.muted),
                     );
-                    ui.add_space(8.0);
+                    ui.add_space(GAP_SM);
                     ui.separator();
-                    ui.add_space(4.0);
+                    ui.add_space(GAP_XS);
                     ui.label(RichText::new("Supported formats").strong().color(t.text));
                     ui.label(
                         RichText::new("PE, ELF, Mach-O, DEX, APK, IPA, JAR, ZIP, ISO9660, MS-DOS, COM, LE/LX, NPM, Amiga hunk, raw binary")
                             .small()
                             .color(t.muted),
                     );
-                    ui.add_space(8.0);
+                    ui.add_space(GAP_SM);
                     ui.label(RichText::new("Built with Rust + eframe/egui").small().color(t.muted));
-                    ui.add_space(8.0);
+                    ui.add_space(GAP_SM);
                     if ui.button("Close").clicked() {
                         open = false;
                     }
@@ -4374,13 +4434,10 @@ fn render_help_fab(ctx: &egui::Context) {
     }
 }
 
-fn paint_icon(
-    painter: &egui::Painter,
-    rect: egui::Rect,
-    icon: AppIcon,
-    color: Color32,
-    stroke_width: f32,
-) {
+fn paint_icon(painter: &egui::Painter, rect: egui::Rect, icon: AppIcon, color: Color32) {
+    // Stroke weight scales with icon size so every glyph reads with consistent
+    // visual heaviness no matter where it is placed.
+    let stroke_width = (rect.width().min(rect.height()) / 10.0).clamp(1.3, 2.2);
     let stroke = egui::Stroke::new(stroke_width, color);
     let c = rect.center();
     let w = rect.width();
